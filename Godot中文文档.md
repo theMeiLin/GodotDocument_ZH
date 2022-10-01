@@ -2055,6 +2055,64 @@ rotation += angular_speed * direction * delta
 
 
 ```
+var direction = 0;
+if (Input.IsActionPressed("ui_left"))
+{
+    direction = -1;
+}
+if (Input.IsActionPressed("ui_right"))
+{
+    direction = 1;
+}
+
+Rotation += AngularSpeed * direction * delta;
+```
+
+我们的局部变量 direction 是一个表示玩家想要转向方向的乘数，。值为0表示玩家没有按向左或向右箭头键。值为1表示玩家想要右转，-1表示他们想要左转。
+
+为了产生这些值，我们引入了条件和输入的用法。条件在GDScript中以 if 关键字开头，以冒号结尾。条件是关键字和行尾之间的表达式。
+
+为了检查这一帧是否按下了一个键，我们调用Input.is_action_pressed()。该方法接收一个代表输入动作的文本字符串，如果该动作被按下，则返回真，否则返回假。
+
+上面我们使用的两个动作 "ui_left "和 "ui_right "是每个Godot项目中预定义的。当玩家在键盘上按下左右箭头或在游戏手柄的D-pad上按下左右箭头时，它们分别会触发。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 你可以通过进入 "项目"->"项目设置"，点击 "输入图 "标签，查看和编辑项目中的键位映射。 |
+
+最后，当我们更新节点的 rotation 时，我们使用方向作为乘数：rotation += angular_speed * direction * delta。
+
+如果你用这段代码运行场景，当你按下 ⬅ (左键)和 ➡ (右键)时，图标应该会旋转。
+
+#### 按“上”时移动
+
+为了只在按下一个键时移动，我们需要修改计算速度的代码。用下面的代码替换以var velocity开头的那一行。
+
+```
+var velocity = Vector2.ZERO
+if Input.is_action_pressed("ui_up"):
+    velocity = Vector2.UP.rotated(rotation) * speed
+```
+
+
+
+```
+var velocity = Vector2.Zero;
+if (Input.IsActionPressed("ui_up"))
+{
+    velocity = Vector2.Up.Rotated(Rotation) * Speed;
+}
+```
+
+我们用Vector2.ZERO的值来初始化速度，这是另一个内置Vector类型的常数，代表一个长度为0的 2D 维向量。
+
+如果玩家按下“ui_up”动作，我们就会更新速度的值，从而使<font color = "blue">sprite</font>向前移动。
+
+#### 完整的脚本
+
+下面是完整的Sprite.gd文件以供参考
+
+```
 extends Sprite
 
 var speed = 400
@@ -2079,4 +2137,120 @@ func _process(delta):
 
 
 
+```
+using Godot;
 
+public class Sprite : Godot.Sprite
+{
+    private float Speed = 400;
+    private float AngularSpeed = Mathf.Pi;
+
+    public override void _Process(float delta)
+    {
+        var direction = 0;
+        if (Input.IsActionPressed("ui_left"))
+        {
+            direction = -1;
+        }
+        if (Input.IsActionPressed("ui_right"))
+        {
+            direction = 1;
+        }
+
+        Rotation += AngularSpeed * direction * delta;
+
+        var velocity = Vector2.Zero;
+        if (Input.IsActionPressed("ui_up"))
+        {
+            velocity = Vector2.Up.Rotated(Rotation) * Speed;
+        }
+
+        Position += velocity * delta;
+    }
+}
+```
+
+
+
+如果您运行场景，您现在应该能够使用左右箭头键旋转并通过按向上键向前移动。
+
+![](images/3.gif)
+
+#### 摘要
+
+总之，Godot 中的每个脚本都代表一个类，并扩展了引擎的一个内置类。您的类继承的节点类型使您可以访问我们的<font color = "blue">sprite</font>案例中的 rotation (旋转)和 position (位置)等属性。您还继承了许多我们没有在本例中使用的函数。
+
+
+
+在 GDScript 中，放在文件顶部的变量是类的属性，也称为成员变量。除了变量之外，您还可以定义函数，这些函数在大多数情况下将是  您的类  的   方法。
+
+Godot 提供了几个虚拟函数，您可以定义它们来将您的类与引擎连接起来。其中包括 _process()，用于在每一帧对节点应用更改，以及 _unhandled_input()，用于接收来自用户的按键和按钮按下等输入事件。还有很多。
+
+Input 单例允许您在代码中的任何位置对玩家的输入做出反应。特别是，您将在 _process() 循环中使用它。
+
+在下一课《使用信号》中，我们将在脚本和节点之间的关系基础上，让我们的节点触发脚本中的代码。
+
+------
+
+### 您的第一个2D游戏
+
+在这个循序渐进的教程系列中，您将用Godot创建你的第一个完整的2D游戏。在本系列教程结束时，您将拥有一个简单而完整的自己的游戏，就像下面的图片一样。
+
+![](images/4.gif)
+
+您将了解 Godot 编辑器的工作原理、如何构建项目以及构建 2D 游戏。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 本项目是对 Godot 引擎的介绍。它假设您已经有一些编程经验。如果您完全是编程新手，您应该从这里开始：Scripting languages |
+
+游戏名为“Dodge the Creeps！”。你的角色必须尽可能长时间地移动并避开敌人。
+
+您将学会：
+
+- 使用 Godot 编辑器创建一个完整的 2D 游戏。
+- 构建一个简单的游戏项目。
+- 移动玩家角色并更改其sprite。
+- 生成随机敌人。
+- 计算分数。
+
+译者注：[请问游戏编程中的精灵（sprite）是什么意思呢？有什么作用呢？老外命名它的意图又是什么呢？ - 知乎 (zhihu.com)](https://www.zhihu.com/question/435692887)
+
+还有更多内容
+
+您会发现另一个系列，您将在其中创建类似的游戏，但使用 3D。不过，我们建议您从这个开始。
+
+#### 为什么要从 2D 开始？
+
+3D游戏比2D游戏要复杂得多。在了解游戏开发过程和如何很好地使用Godot之前，你最好还是坚持做2D。
+
+你可以在这个地方找到这个项目的完整版本：
+
+- https://github.com/godotengine/godot-demo-projects
+
+- https://www.aliyundrive.com/s/PwrPHBGipRW 提取码：8888
+
+#### 前提条件
+
+这个循序渐进的教程为遵循完整入门指南的初学者准备的。
+
+如果您是一位经验丰富的程序员，您可以在此处找到完整的演示源代码：https://github.com/godotengine/godot-demo-projects
+
+
+
+我们准备了一些您需要下载的游戏资源，以便我们可以直接跳转到代码。
+
+您可以通过单击下面的链接下载它们。 同上
+
+### 目录
+
+- 设置项目
+- 创建玩家场景
+- 编写玩家代码
+- 创建敌人
+- 主要游戏场景
+- 抬头显示器
+- 收尾工作
+- 平视显示仪
+
+#### 设置项目
