@@ -2190,9 +2190,348 @@ Input 单例允许您在代码中的任何位置对玩家的输入做出反应�
 
 在下一课《使用信号》中，我们将在脚本和节点之间的关系基础上，让我们的节点触发脚本中的代码。
 
+### 使用信号
+
+在本课中，我们将研究信号。它们是节点在发生特定事件时发出的消息，例如按下按钮。其他节点可以连接到该信号并在事件发生时调用函数。
+
+信号是 Godot 中内置的一种委托机制，它允许一个游戏对象对另一个游戏对象的更改做出反应，而无需相互引用。使用信号限制耦合并保持您的代码灵活。
+
+例如，屏幕上可能有一个生命条，代表玩家的健康状况。当玩家受到伤害或使用治疗药水时，您希望栏反映变化。为此，在 Godot 中，您将使用信号。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 正如介绍中提到的，信号是Godot的观察者模式的版本。你可以在这里了解更多信息：https://gameprogrammingpatterns.com/observer.html |
+
+现在，我们将使用一个信号来使上一课（监听玩家输入）中的 Godot 图标移动并通过按下按钮停止。
+
+#### 场景设置
+
+为了在我们的游戏中添加一个按钮，我们将创建一个新的“主”场景，其中包括一个按钮和我们在之前课程中编写的 Sprite.tscn 场景。
+
+进入菜单 "场景"->"新建场景"，创建一个新场景。
+
+![](images/Snipaste_2022-10-04_23-45-21.png)
+
+在场景停靠栏中，单击 2D 场景按钮。这将添加一个 <font color = "blue">Node2D</font> 作为我们的根。
+
+![](images/Snipaste_2022-10-04_23-51-33.png)
+
+在文件系统停靠区，点击并拖动你之前保存的Sprite.tscn文件到<font color = "blue">Node2D</font>上，将其实例化。
+
+译者注：也可以选择 <font color = "blue">Node2D</font> 然后右键点击 实例化子场景 选择 Sprite.tscn。
+
+![](images/Snipaste_2022-10-04_23-52-40.png)
+
+我们想添加另一个节点作为 <font color = "blue">Sprite</font> 的同级节点。为此，右键单击 <font color = "blue">Node2D</font> 并选择添加子节点。
+
+![](images/Snipaste_2022-10-04_23-58-48.png)
+
+搜索 <font color = "green">Button</font> 节点类型并添加它。
+
+![](images/Snipaste_2022-10-04_23-59-44.png)
+
+默认情况下，该节点很小。单击并拖动视口中 Button 的右下角手柄以调整其大小。
+
+![](images/Snipaste_2022-10-05_00-01-45.png)
+
+如果看不到手柄，请确保工具栏中的选择工具处于活动状态。
+
+![](images/Snipaste_2022-10-05_00-02-50.png)
+
+点击并拖动按钮本身，使其靠近sprite。
+
+您也可以通过在检查器中编辑按钮的文本属性来给它写一个标签。输入 "Toggle motion"。
+
+![](images/Snipaste_2022-10-05_00-06-12.png)
+
+您的场景树和视口应如下所示。
+
+![](images/Snipaste_2022-10-05_00-07-45.png)
+
+保存新创建的场景。然后您可以使用 F6 运行它。此刻，该按钮将可见的，但如果您按下它，不会发生任何事情。
+
+#### 在编辑器中连接信号
+
+在这里，我们想要将 <font color = "green">Button</font> 的“pressed”信号连接到 <font color = "blue">Sprite</font>，并且我们想要调用一个新函数来打开和关闭其运动。我们需要将脚本附加到 <font color = "blue">Sprite </font>节点，这是我们在上一课中所做的。
+
+你可以在节点停靠区中连接信号。选择<font color = "green">Button</font>节点，在编辑器的右侧，点击检查器旁边的 "节点 "标签。
+
+![](images/Snipaste_2022-10-05_00-13-32.png)
+
+停靠区显示所选节点上可用的信号列表。
+
+![](images/Snipaste_2022-10-05_00-14-23.png)
+
+双击“pressed”信号打开节点连接窗口。
+
+![](images/Snipaste_2022-10-05_00-15-15.png)
+
+在那里，您可以将信号连接到 <font color = "blue">Sprite</font> 节点。该节点需要一个接收器函数，当 <font color = "green">Button</font> 发出信号时，Godot将调用该函数。编辑器会为您生成一个。按照惯例，我们将这些回调函数命名为“_ on_NodeName_Signal_Name”。在这里，它将是“_on_Button_pressed”。 
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 通过编辑器的 节点停靠区(Node dock)连接信号时，您可以使用两种模式。简单的仅允许您连接到附加了脚本的节点并在它们上创建新的回调函数。<br/>![](images/Snipaste_2022-10-05_00-27-03.png)<br/>高级视图允许您连接到任何节点和任何内置函数、向回调添加参数以及设置选项。您可以通过单击“高级”按钮在窗口右下角切换模式。 |
+
+点击 "连接 "按钮，完成信号连接并跳到脚本工作区。你应该看到新方法在左边的空白处有一个连接图标。
+
+![](images/Snipaste_2022-10-05_00-34-23.png)
+
+如果单击该图标，则会弹出一个窗口并显示有关连接的信息。此功能仅在编辑器中连接节点时可用。
+
+![](images/Snipaste_2022-10-05_00-35-54.png)
+
+让我们用代码替换带有pass关键字的那一行，以切换节点的运动。
+
+我们的 <font color = "blue">Sprite</font> 的移动得益于_process()函数中的代码。Godot提供了一种方法来切换处理的开与关。Node.set_process()。Node类的另一个方法，is_processing()，如果空闲处理被激活，则返回true。我们可以使用not关键字来反转该值。
+
+```
+func _on_Button_pressed():
+    set_process(not is_processing())
+```
+
+
+
+此函数将切换处理，并在按下按钮时依次打开和关闭图标的运动。
+
+在尝试游戏之前，我们需要简化我们的_process()函数，以自动移动节点，而不是等待用户输入。用下面的代码代替它，我们在两节课前看到过
+
+```
+func _process(delta):
+    rotation += angular_speed * delta
+    var velocity = Vector2.UP.rotated(rotation) * speed
+    position += velocity * delta
+```
+
+
+
+您完整的 Sprite.gd 代码应如下所示。
+
+```
+extends Sprite
+
+var speed = 400
+var angular_speed = PI
+
+
+func _process(delta):
+    rotation += angular_speed * delta
+    var velocity = Vector2.UP.rotated(rotation) * speed
+    position += velocity * delta
+
+
+func _on_Button_pressed():
+    set_process(not is_processing())
+```
+
+
+
+现在运行场景并单击按钮以查看sprite的开始和停止。
+
+#### 通过代码连接信号
+
+您可以通过代码连接信号，而不是使用编辑器。在脚本中创建节点或实例化场景时，这是必需的。
+
+让我们在这里使用一个不同的节点。Godot有一个定时器节点，在实现技能冷却时间、武器重装等方面非常有用。
+
+返回到2D工作空间。您可以单击窗口顶部的“2D”文本，也可以按Ctrl+F1(在MacOS上按Alt+1)。
+
+在场景停靠栏中，右键单击 <font color = "blue">Sprite</font> 节点并添加一个新的子节点。搜索 Timer 并添加对应的节点。您的场景现在应该如下所示。
+
+![](images/Snipaste_2022-10-05_00-48-36.png)
+
+选择 Timer 节点后，转到检查器并检查 Autostart 属性。勾选 Autostart 的启动
+
+![](images/Snipaste_2022-10-05_00-49-37.png)
+
+单击 <font color = "blue">Sprite</font> 旁边的脚本图标以跳回脚本工作区。
+
+![](images/Snipaste_2022-10-05_00-51-31.png)
+
+我们需要做两个操作来通过代码连接节点：
+
+1. 从 <font color = "blue">Sprite</font> 获取对 Timer 的引用。
+2. 调用 Timer 的 connect() 方法。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 要通过代码连接到一个信号，你需要调用你想监听的节点的connect()方法。在本例中，我们想监听定时器的 "超时 "信号。 |
+
+我们想在场景实例化时连接信号，我们可以使用 Node._ready() 内置函数来实现，该函数在节点完全实例化时由引擎自动调用。
+
+要获取相对于当前节点的节点的引用，我们使用 Node.get_node() 方法。我们可以将引用存储在变量中。
+
+```
+func _ready():
+    var timer = get_node("Timer")
+```
+
+
+
+函数 get_node() 查看 <font color = "blue">Sprite</font> 的子节点并按其名称获取节点。例如，如果您在编辑器中将 Timer 节点重命名为“BlinkingTimer”，则必须将调用更改为 get_node("BlinkingTimer")。
+
+我们现在可以在 _ready() 函数中将 Timer 连接到 <font color = "blue">Sprite</font>。
+
+```
+func _ready():
+    var timer = get_node("Timer")
+    timer.connect("timeout", self, "_on_Timer_timeout")
+```
+
+
+
+该行如下所示：我们将 Timer 的“超时”信号连接到脚本附加到的节点（self）。当 Timer 发出“超时”时，我们要调用需要定义的函数“_on_Timer_timeout”。让我们将它添加到脚本的底部并使用它来切换sprite的可见性。
+
+![](images/Snipaste_2022-10-05_01-01-11.png)
+
+```
+func _on_Timer_timeout():
+    visible = not visible
+```
+
+visible 属性是一个布尔值，用于控制节点的可见性。visible = not visible。如果visible为true，则它变为false，反之亦然。
+
+如果你现在运行这个场景，你会看到sprite以一秒的间隔闪烁。
+
+#### 完整的脚本
+
+这就是我们的移动和闪烁的Godot图标小演示！这是一个完整的Sprite.gd文件。下面是完整的Sprite.gd文件供参考。
+
+```
+extends Sprite
+
+var speed = 400
+var angular_speed = PI
+
+
+func _ready():
+    var timer = get_node("Timer")
+    timer.connect("timeout", self, "_on_Timer_timeout")
+
+
+func _process(delta):
+    rotation += angular_speed * delta
+    var velocity = Vector2.UP.rotated(rotation) * speed
+    position += velocity * delta
+
+
+func _on_Button_pressed():
+    set_process(not is_processing())
+
+
+func _on_Timer_timeout():
+    visible = not visible
+```
+
+
+
+#### 自定义信号
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 本节是关于如何定义和使用您自己的信号的参考，而不是基于之前课程中创建的项目。 |
+
+您可以在脚本中定义自定义信号。例如，假设您想在玩家的生命值达到零时显示游戏结束屏幕。为此，您可以在其生命值达到 0 时定义一个名为“died”或“health_depleted”的信号。
+
+```
+extends Sprite
+
+signal health_depleted
+
+var health = 10
+```
+
+译者注：继续在上面使用的项目中添加代码。
+
+![](images/Snipaste_2022-10-05_01-08-06.png)
+
+![](images/Snipaste_2022-10-05_01-07-15.png)
+
+要在你的脚本中发射一个信号，请调用emit_signal()。
+
+```
+func take_damage(amount):
+    health -= amount
+    if health <= 0:
+        emit_signal("health_depleted")
+```
+
+
+
+信号可以选择声明一个或多个参数。在括号之间指定参数名称：
+
+```
+signal health_changed(old_value, new_value)
+```
+
+
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 信号参数显示在编辑器的节点停靠栏中，Godot 可以使用它们为您生成回调函数。但是，您仍然可以在发出信号时发出任意数量的参数。因此，由您决定发出正确的值。 |
+
+要与信号一起发射数值，请将它们作为额外的参数添加到emit_signal()函数中。
+
+```
+func take_damage(amount):
+    var old_health = health
+    health -= amount
+    emit_signal("health_changed", old_health, health)
+```
+
+
+
+完整代码：
+
+```
+extends Sprite
+
+signal health_depleted
+signal health_changed(old_value, new_value)
+
+var health = 10
+
+var speed = 400
+var angular_speed = PI
+
+func _process(delta):
+	rotation += angular_speed * delta
+	var velocity = Vector2.UP.rotated(rotation) * speed
+	position += velocity * delta
+
+
+func _on_Button_pressed():
+	set_process(not is_processing())
+
+func _ready():
+	var timer = get_node("Timer")
+	timer.connect("timeout", self, "_on_Timer_timeout")
+
+func _on_Timer_ready():
+	visible = not visible
+
+func take_damage(amount):
+	var old_health = health
+	health -= amount
+	emit_signal("health_changed", old_health, health)
+```
+
+![](images/Snipaste_2022-10-05_01-18-45.png)
+
+译者注：这一段就是为了演示自定义信号。
+
+#### 摘要
+
+Godot 中的任何节点都会在发生特定事件时发出信号，例如按下按钮。其他节点可以连接到单独的信号并对选定的事件做出反应。
+
+信号有很多用途。有了它们，您可以对节点进入或退出游戏世界、碰撞、角色进入或离开区域、界面元素改变大小等做出反应。
+
+例如，代表硬币的 Area2D 会在玩家的物理身体进入其碰撞形状时发出 body_entered 信号，让您知道玩家何时收集到它。
+
+在下一节 "你的第一个2D游戏 "中，你将创建一个完整的2D游戏，并将你到目前为止所学的一切付诸实践。
+
 ------
 
-### 您的第一个2D游戏
+## 您的第一个2D游戏
 
 在这个循序渐进的教程系列中，您将用Godot创建你的第一个完整的2D游戏。在本系列教程结束时，您将拥有一个简单而完整的自己的游戏，就像下面的图片一样。
 
@@ -2234,7 +2573,10 @@ Input 单例允许您在代码中的任何位置对玩家的输入做出反应�
 
 这个循序渐进的教程为遵循完整入门指南的初学者准备的。
 
-如果您是一位经验丰富的程序员，您可以在此处找到完整的演示源代码：https://github.com/godotengine/godot-demo-projects
+如果您是一位经验丰富的程序员，您可以在此处找到完整的演示源代码：
+
+- https://github.com/godotengine/godot-demo-projects
+- https://www.aliyundrive.com/s/PwrPHBGipRW 提取码：8888
 
 
 
@@ -2254,3 +2596,93 @@ Input 单例允许您在代码中的任何位置对玩家的输入做出反应�
 - 平视显示仪
 
 #### 设置项目
+
+在这个简短的第一部分中，我们将建立和组织这个项目。
+
+启动 Godot 并创建一个新项目。
+
+下载 dodge_assets.zip。存档包含您将用于制作游戏的图像和声音。提取存档并将 art/ 和 fonts/ 目录移动到项目目录。
+
+译者注：不要照上面的方法导入，在新项目中创建art和fonts文件。分别将dodge_the_creeps中的  art文件中的所有.png和fonts文件夹中的Xolonium-Regular.ttf复制到新项目的art和fonts中。
+
+- https://docs.godotengine.org/en/stable/_downloads/923b18d4e18125cf494ee5f7efba7e03/dodge_assets.zip
+
+- https://www.aliyundrive.com/s/PwrPHBGipRW 提取码：8888
+
+您的项目文件夹应如下所示。
+
+![](images/Snipaste_2022-10-05_01-30-23.png)
+
+这个游戏是为纵向模式设计的，所以我们需要调整游戏窗口的大小。点击项目->项目设置，打开项目设置窗口，在左栏，打开显示->窗口标签。在那里，将 "宽度 "设置为480，"高度 "设置为720。
+
+![](images/Snipaste_2022-10-05_01-36-38.png)
+
+此外，向下滚动到该部分的底部，并在“拉伸”选项下，将模式设置为“2d”，将纵横比设置为“Keep”。这确保了游戏在不同大小的屏幕上保持一致的缩放比例。
+
+![](images/Snipaste_2022-10-05_01-38-27.png)
+
+##### 组织项目
+
+在这个项目中，我们将制作 3 个独立的场景：Player、Mob 和 HUD，我们将它们组合到游戏的主场景中。
+
+在较大的项目中，创建文件夹来保存各种场景及其脚本可能很有用，但对于这个相对较小的游戏，您可以将场景和脚本保存在项目的根文件夹中，由 res:// 标识。您可以在
+
+![](images/Snipaste_2022-10-05_01-40-25.png)
+
+项目准备就绪后，我们就可以在下一课中设计玩家场景了。
+
+#### 创建玩家场景
+
+有了项目设置，我们就可以开始制作玩家控制的角色了。
+
+第一个场景将定义 Player 对象。创建单独的玩家场景的好处之一是我们可以单独测试它，甚至在我们创建游戏的其他部分之前。
+
+##### 节点结构
+
+首先，我们需要为播放器对象选择一个根节点。作为一般规则，场景的根节点应该反映对象所需的功能——对象是什么。单击“其他节点”按钮并将一个 <font color = "blue">Area2D</font> 节点添加到场景中。
+
+![](images/Snipaste_2022-10-05_01-43-57.png)
+
+![](images/Snipaste_2022-10-05_01-45-13.png)
+
+Godot 将在场景树中的节点旁边显示一个警告图标。你现在可以忽略它。我们稍后会解决它。
+
+使用 <font color = "blue">Area2D</font>，我们可以检测重叠或撞到玩家的物体。通过双击将节点的名称更改为 Player。现在我们已经设置了场景的根节点，我们可以添加额外的节点来赋予它更多的功能。
+
+在我们给Player节点添加任何子节点之前，我们要确保我们不会因为点击它们而意外地移动或调整它们的大小。选择该节点并点击锁右边的图标；其工具提示说："确保对象的子节点不可选择"。
+
+![](images/Snipaste_2022-10-05_01-47-49.png)
+
+保存场景。单击场景 -> 保存，或在 Windows/Linux 上按 Ctrl + S 或在 macOS 上按 Cmd + S。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 对于这个项目，我们将遵循Godot的命名惯例。<br/>GDScript。类（节点）使用PascalCase，变量和函数使用snake_case，常量使用ALL_CAPS（参见GDScript风格指南）。<br/>C#: 类、导出变量和方法使用PascalCase，私有字段使用_camelCase，局部变量和参数使用camelCase（见C#风格指南）。在连接信号时要注意准确地输入方法名称。 |
+
+##### Sprite动画
+
+单击 Player 节点并添加一个 <font color = "blue">AnimatedSprite</font> 节点作为子节点。 AnimatedSprite 将为我们的播放器处理外观和动画。请注意，节点旁边有一个警告符号。 AnimatedSprite 需要一个 SpriteFrames 资源，这是它可以显示的动画列表。要创建一个，在检查器中找到 Frames 属性，然后单击“[empty]”->“新建 SpriteFrames”。
+
+![](images/Snipaste_2022-10-05_01-54-48.png)
+
+在左边是一个动画的列表。点击 "defalut "的那个，并将其重命名为 "walk"。然后点击 "新建动画 "按钮，创建第二个名为 "up "的动画。在 "文件系统 "标签中找到播放器图像--它们在你之前解压的艺术文件夹中。将每个动画的两张图片，即playerGrey_up[1/2]和playerGrey_walk[1/2]，拖到相应动画的面板的 "动画帧 "一侧。
+
+![](images/Snipaste_2022-10-05_01-57-53.png)
+
+![](images/Snipaste_2022-10-05_01-58-23.png)
+
+玩家图像对于游戏窗口来说有点太大了，所以我们需要缩小它们。单击 <font color = "blue">AnimatedSprite</font> 节点并将 Scale 属性设置为 (0.5, 0.5)。您可以在 Node2D 标题下的检查器中找到它。
+
+![](images/Snipaste_2022-10-05_02-00-26.png)
+
+最后，添加一个<font color = "blue">CollisionShape2D</font>作为Player的一个子节点。这将决定玩家的 "hitbox"，或其碰撞区域的边界。对于这个角色来说，一个<font color = "blue">CapsuleShape2D</font>节点是最合适的，所以在检查器中的 "Shape "旁边，点击"[空]"" -> "新建CapsuleShape2D"。使用两个大小手柄，调整形状大小以覆盖精灵。
+
+![](images/Snipaste_2022-10-05_02-04-16.png)
+
+完成后，您的 Player 场景应如下所示：
+
+![](images/Snipaste_2022-10-05_02-04-40.png)
+
+确保在进行这些更改后再次保存场景。
+
+在下一部分中，我们将向播放器节点添加一个脚本来移动它并为其设置动画。然后，我们将设置碰撞检测以了解玩家何时被某物击中。
