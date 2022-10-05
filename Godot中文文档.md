@@ -3108,7 +3108,7 @@ void Player::_register_methods() {
 请注意绿色图标表示有信号连接到此功能。将此代码添加到函数中：
 
 ```
-func _on_Player_body_entered(body):
+func _on_Player_body_entered(_body):
     hide() # Player disappears after being hit.
     emit_signal("hit")
     # Must be deferred as we can't change physics properties on a physics callback.
@@ -3195,13 +3195,13 @@ func _ready():
 
 func _process(delta):
 	var velocity = Vector2.ZERO # The player's movement vector.
-	if Input.is_action_just_pressed("move_right"):
+	if Input.is_action_pressed("move_right"):
 		velocity.x += 1
-	if Input.is_action_just_pressed("move_left"):
+	if Input.is_action_pressed("move_left"):
 		velocity.x -= 1
-	if Input.is_action_just_pressed("move_down"):
+	if Input.is_action_pressed("move_down"):
 		velocity.y += 1
-	if Input.is_action_just_pressed("move_up"):
+	if Input.is_action_pressed("move_up"):
 		velocity.y -= 1
 	
 	if velocity.length() > 0:
@@ -3223,19 +3223,16 @@ func _process(delta):
 		$AnimatedSprite.animation = "up"
 		$AnimatedSprite.flip_v = velocity.y > 0
 
-
-func _on_Player_body_entered(body):
-	hide() # Player disappears after being hit.
-	emit_signal("hit")
-	# Must be deferred as we can't change physics properties on a physics callback.
-	$CollisionShape2D.set_deferred("disabled",true)
-
-
 func start(pos):
 	position = pos
 	show()
 	$CollisionShape2D.disabled = false
 
+func _on_Player_body_entered(_body):
+	hide() # Player disappears after being hit.
+	emit_signal("hit")
+	# Must be deferred as we can't change physics properties on a physics callback.
+	$CollisionShape2D.set_deferred("disabled",true)
 ```
 
 
@@ -3419,6 +3416,24 @@ void Mob::_on_VisibilityNotifier2D_screen_exited() {
 这样就完成了 Mob 场景。
 
 随着玩家和敌人的准备就绪，在下一部分，我们将把他们带到一个新的场景中。我们将使敌人在游戏边界周围随机产生并向前移动，把我们的项目变成一个可玩的游戏。
+
+完整脚本 Mob.gd
+
+```
+extends RigidBody2D
+
+
+func _ready():
+	$AnimateSprite.playing = true
+	var mob_types = $AnimateSprite.frames.get_animation_names()
+	$AnimateSprite.animation = mob_types[randi() % mob_types.size()]
+	
+
+func _on_VisibilityNotifier2D_screen_exited():
+	queue_free()
+```
+
+
 
 #### 主要游戏场景
 
@@ -3614,4 +3629,947 @@ void Main::_ready() {
 - 单击“[empty]”旁边的向下箭头，然后选择“加载”。选择 Mob.tscn。
 
 ![](images/Snipaste_2022-10-05_20-21-07.png)
+
+接下来，在场景停靠栏中选择 Player 节点，然后访问侧边栏上的节点停靠。确保在节点停靠区中选择了信号选项卡。
+
+您应该会看到 Player 节点的信号列表。在列表中找到并双击 hit 信号（或右键单击它并选择“连接...”）。这将打开信号连接对话框。我们想要创建一个名为 game_over 的新函数，它将处理游戏结束时需要发生的事情。在信号连接对话框底部的“接收方法”框中键入“game_over”，然后单击“连接”。将以下代码添加到新函数中，以及为新游戏设置一切的 new_game 函数：
+
+![](images/Snipaste_2022-10-05_23-23-28.png)
+
+```
+func game_over():
+    $ScoreTimer.stop()
+    $MobTimer.stop()
+
+func new_game():
+    score = 0
+    $Player.start($StartPosition.position)
+    $StartTimer.start()
+```
+
+
+
+```
+public void GameOver()
+{
+    GetNode<Timer>("MobTimer").Stop();
+    GetNode<Timer>("ScoreTimer").Stop();
+}
+
+public void NewGame()
+{
+    Score = 0;
+
+    var player = GetNode<Player>("Player");
+    var startPosition = GetNode<Position2D>("StartPosition");
+    player.Start(startPosition.Position);
+
+    GetNode<Timer>("StartTimer").Start();
+}
+```
+
+
+
+```
+// This code goes in `main.cpp`.
+void Main::game_over() {
+    _score_timer->stop();
+    _mob_timer->stop();
+}
+
+void Main::new_game() {
+    score = 0;
+    _player->start(_start_position->get_position());
+    _start_timer->start();
+}
+```
+
+
+
+现在将每个 Timer 节点（StartTimer、ScoreTimer 和 MobTimer）的 timeout() 信号连接到主脚本。 StartTimer 将启动其他两个计时器。 ScoreTimer 会将分数加 1。
+
+```
+func _on_ScoreTimer_timeout():
+    score += 1
+
+func _on_StartTimer_timeout():
+    $MobTimer.start()
+    $ScoreTimer.start()
+```
+
+
+
+```
+public void OnScoreTimerTimeout()
+{
+    Score++;
+}
+
+public void OnStartTimerTimeout()
+{
+    GetNode<Timer>("MobTimer").Start();
+    GetNode<Timer>("ScoreTimer").Start();
+}
+```
+
+
+
+```
+// This code goes in `main.cpp`.
+void Main::_on_ScoreTimer_timeout() {
+    score += 1;
+}
+
+void Main::_on_StartTimer_timeout() {
+    _mob_timer->start();
+    _score_timer->start();
+}
+
+// Also add this to register all methods and the mob scene property.
+void Main::_register_methods() {
+    godot::register_method("_ready", &Main::_ready);
+    godot::register_method("game_over", &Main::game_over);
+    godot::register_method("new_game", &Main::new_game);
+    godot::register_method("_on_MobTimer_timeout", &Main::_on_MobTimer_timeout);
+    godot::register_method("_on_ScoreTimer_timeout", &Main::_on_ScoreTimer_timeout);
+    godot::register_method("_on_StartTimer_timeout", &Main::_on_StartTimer_timeout);
+    godot::register_property("mob_scene", &Main::mob_scene, (godot::Ref<godot::PackedScene>)nullptr);
+}
+```
+
+
+
+在_on_MobTimer_timeout()中，我们将创建一个小怪实例，沿着 <font color = "blue">Path2D </font>随机选择一个起始位置，然后让暴徒开始运动。<font color = "blue">PathFollow2D</font>节点会在跟随路径时自动旋转，所以我们将用它来选择暴徒的方向以及它的位置。当我们生成一个小怪时，我们将在150.0和250.0之间随机选择一个值，以确定每个小怪的移动速度（如果它们都以同样的速度移动，那就太无聊了）。
+
+请注意，必须使用 add_child() 将新实例添加到场景中。
+
+```
+func _on_MobTimer_timeout():
+    # Create a new instance of the Mob scene.
+    var mob = mob_scene.instance()
+
+    # Choose a random location on Path2D.
+    var mob_spawn_location = get_node("MobPath/MobSpawnLocation")
+    mob_spawn_location.offset = randi()
+
+    # Set the mob's direction perpendicular to the path direction.
+    var direction = mob_spawn_location.rotation + PI / 2
+
+    # Set the mob's position to a random location.
+    mob.position = mob_spawn_location.position
+
+    # Add some randomness to the direction.
+    direction += rand_range(-PI / 4, PI / 4)
+    mob.rotation = direction
+
+    # Choose the velocity for the mob.
+    var velocity = Vector2(rand_range(150.0, 250.0), 0.0)
+    mob.linear_velocity = velocity.rotated(direction)
+
+    # Spawn the mob by adding it to the Main scene.
+    add_child(mob
+```
+
+
+
+```
+public void OnMobTimerTimeout()
+{
+    // Note: Normally it is best to use explicit types rather than the `var`
+    // keyword. However, var is acceptable to use here because the types are
+    // obviously Mob and PathFollow2D, since they appear later on the line.
+
+    // Create a new instance of the Mob scene.
+    var mob = (Mob)MobScene.Instance();
+
+    // Choose a random location on Path2D.
+    var mobSpawnLocation = GetNode<PathFollow2D>("MobPath/MobSpawnLocation");
+    mobSpawnLocation.Offset = GD.Randi();
+
+    // Set the mob's direction perpendicular to the path direction.
+    float direction = mobSpawnLocation.Rotation + Mathf.Pi / 2;
+
+    // Set the mob's position to a random location.
+    mob.Position = mobSpawnLocation.Position;
+
+    // Add some randomness to the direction.
+    direction += (float)GD.RandRange(-Mathf.Pi / 4, Mathf.Pi / 4);
+    mob.Rotation = direction;
+
+    // Choose the velocity.
+    var velocity = new Vector2((float)GD.RandRange(150.0, 250.0), 0);
+    mob.LinearVelocity = velocity.Rotated(direction);
+
+    // Spawn the mob by adding it to the Main scene.
+    AddChild(mob);
+}
+```
+
+
+
+```
+// This code goes in `main.cpp`.
+void Main::_on_MobTimer_timeout() {
+    // Create a new instance of the Mob scene.
+    godot::Node *mob = mob_scene->instance();
+
+    // Choose a random location on Path2D.
+    _mob_spawn_location->set_offset((real_t)_random->randi());
+
+    // Set the mob's direction perpendicular to the path direction.
+    real_t direction = _mob_spawn_location->get_rotation() + (real_t)Math_PI / 2;
+
+    // Set the mob's position to a random location.
+    mob->set("position", _mob_spawn_location->get_position());
+
+    // Add some randomness to the direction.
+    direction += _random->randf_range((real_t)-Math_PI / 4, (real_t)Math_PI / 4);
+    mob->set("rotation", direction);
+
+    // Choose the velocity for the mob.
+    godot::Vector2 velocity = godot::Vector2(_random->randf_range(150.0, 250.0), 0.0);
+    mob->set("linear_velocity", velocity.rotated(direction));
+
+    // Spawn the mob by adding it to the Main scene.
+    add_child(mob);
+}
+```
+
+
+
+| 重要                                                         |
+| ------------------------------------------------------------ |
+| 为什么是 PI？在需要角度的函数中，Godot 使用弧度，而不是度数。 Pi 代表半圈弧度，大约 3.1415（还有 TAU 等于 2 * PI）。如果您更习惯使用度数，则需要使用 deg2rad() 和 rad2deg() 函数在两者之间进行转换。 |
+
+测试场景
+
+让我们测试场景以确保一切正常。将此 new_game 调用添加到 _ready()：
+
+```
+func _ready():
+    randomize()
+    new_game()
+```
+
+
+
+```
+public override void _Ready()
+{
+    NewGame();
+}
+```
+
+
+
+```
+// This code goes in `main.cpp`.
+void Main::_ready() {
+    new_game();
+}
+```
+
+
+
+让我们也将 Main 指定为我们的“主场景”——游戏启动时自动运行的场景。按“运行”按钮并在出现提示时选择 Main.tscn。
+
+![](images/Snipaste_2022-10-05_23-52-04.png)
+
+当您确定一切正常时，从 _ready() 中删除对 new_game() 的调用。
+
+我们的游戏缺少什么？一些用户界面。在下一课中，我们将添加一个标题屏幕并显示玩家的得分。
+
+完整代码 Main.gd
+
+```
+extends Node
+
+export(PackedScene) var mob_scene
+var score
+
+func _ready():
+	randomize()
+
+func game_over():
+	$ScoreTimer.stop()
+	$MobTimer.stop()
+
+func new_game():
+	get_tree().call_group("mobs", "queue_free")
+	score = 0
+	$Player.start($StartPosition.position)
+	$StartTimer.start()
+	$HUD.update_score(score)
+	$HUD.show_message("Get Ready")
+	
+func _on_MobTimer_timeout():
+	# Create a new instance of the Mob scene.
+	var mob = mob_scene.instance()
+
+	# Choose a random location on Path2D.
+	var mob_spawn_location = get_node("MobPath/MobSpawnLocation")
+	mob_spawn_location.offset = randi()
+
+	# Set the mob's direction perpendicular to the path direction.
+	var direction = mob_spawn_location.rotation + PI / 2
+
+	# Set the mob's position to a random location.
+	mob.position = mob_spawn_location.position
+
+	# Add some randomness to the direction.
+	direction += rand_range(-PI / 4, PI / 4)
+	mob.rotation = direction
+
+	# Choose the velocity for the mob.
+	var velocity = Vector2(rand_range(150.0, 250.0), 0.0)
+	mob.linear_velocity = velocity.rotated(direction)
+
+	# Spawn the mob by adding it to the Main scene.
+	add_child(mob)
+
+func _on_ScoreTimer_timeout():
+	score += 1
+	$HUD.update_score(score)
+
+func _on_StartTimer_timeout():
+	$MobTimer.start()
+	$ScoreTimer.start()
+```
+
+
+
+#### 平视显示仪
+
+我们的游戏需要的最后一块是用户界面（UI），以显示诸如分数、"游戏结束 "信息和重启按钮。
+
+创建一个新场景，并添加一个名为 HUD 的 CanvasLayer 节点。 “HUD”代表“平视显示器”，一种信息显示，显示为游戏视图顶部的叠加层。
+
+![](images/Snipaste_2022-10-05_23-56-01.png)
+
+CanvasLayer 节点让我们可以在游戏其余部分之上的图层上绘制我们的 UI 元素，这样它显示的信息就不会被任何游戏元素（如玩家或生物）所掩盖。
+
+HUD需要显示以下信息：
+
+- 分数，由ScoreTimer改变。
+- 一条信息，如 "游戏结束 "或 "准备好！"
+- 一个 "开始 "按钮，开始游戏。
+
+UI 元素的基本节点是 <font color = "green">Control</font>。为了创建我们的 UI，我们将使用两种类型的 <font color = "green">Control</font> 节点：<font color = "green">Label</font> 和 <font color = "green">Button</font>。
+
+创建以下内容作为 HUD 节点的子节点：
+
+- 名为 ScoreLabel 的 <font color = "green">Label</font>。
+- 名为 Message 的<font color = "green">Label</font>。
+- 名为 StartButton 的<font color = "green">Button</font>。
+- 定时器名为 MessageTimer。
+
+![](images/Snipaste_2022-10-06_00-05-27.png)
+
+单击 ScoreLabel 并在检查器的 Text 字段中输入一个数字。控制节点的默认字体很小并且不能很好地缩放。游戏资源中包含一个名为“Xolonium-Regular.ttf”的字体文件。要使用此字体，请执行以下操作：
+
+在 Theme overrides > Fonts 单击空框并选择“新建 DynamicFont”
+
+![](images/Snipaste_2022-10-06_00-07-39.png)
+
+单击您添加的“DynamicFont”，然后在“font”>“FontData”下，选择“加载”并选择“Xolonium-Regular.ttf”文件。
+
+![](images/Snipaste_2022-10-06_00-09-07.png)
+
+在设置下设置“size”属性，64 效果很好。
+
+![](images/Snipaste_2022-10-06_00-10-48.png)
+
+在 ScoreLabel 上完成此操作后，您可以单击 Font 属性旁边的向下箭头并选择“复制”，然后将其“粘贴”到其他两个控制节点的相同位置。
+
+![](images/Snipaste_2022-10-06_00-12-11.png)
+
+
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 锚点和边距：控制节点有位置和大小，但它们也有锚点和边距。锚点定义原点 - 节点边缘的参考点。当您移动或调整控制节点大小时，边距会自动更新。它们表示从控制节点的边缘到其锚点的距离。 |
+
+如下图所示排列节点。单击“布局”按钮设置控制节点的布局：
+
+![](images/Snipaste_2022-10-06_00-40-04.png)
+
+您可以拖动节点以手动放置它们，或者为了更精确的放置，使用以下设置：
+
+##### ScoreLabel
+
+- 布局 : "顶部全幅"  (Top Wide)
+- *Text* : `0`
+- *Align* : "Center"
+
+##### Message
+
+- 布局 : "水平居中全幅"  HCenter Wide)
+- *Text* : `Dodge the Creeps!`
+- *Align* : "Center"
+- *Autowrap* : "On"
+
+##### StartButton
+
+- *Text* : `Start`
+- *布局* : "剧中"  (Center Bottom)
+- *Margin* :
+  - Top: `-200`
+  - Bottom: `-100`
+
+![](images/Snipaste_2022-10-06_00-43-21.png)
+
+在 MessageTimer 上，将 Wait Time 设置为 2 并将 One Shot 属性设置为“启用”。
+
+现在将此脚本添加到 HUD：
+
+```
+extends CanvasLayer
+
+signal start_game
+```
+
+
+
+```
+public class HUD : CanvasLayer
+{
+    // Don't forget to rebuild the project so the editor knows about the new signal.
+
+    [Signal]
+    public delegate void StartGame();
+}
+```
+
+
+
+```
+// Copy `player.gdns` to `hud.gdns` and replace `Player` with `HUD`.
+// Attach the `hud.gdns` file to the HUD node.
+
+// Create two files `hud.cpp` and `hud.hpp` next to `entry.cpp` in `src`.
+// This code goes in `hud.hpp`. We also define the methods we'll be using here.
+#ifndef HUD_H
+#define HUD_H
+
+#include <Button.hpp>
+#include <CanvasLayer.hpp>
+#include <Godot.hpp>
+#include <Label.hpp>
+#include <Timer.hpp>
+
+class HUD : public godot::CanvasLayer {
+    GODOT_CLASS(HUD, godot::CanvasLayer)
+
+    godot::Label *_score_label;
+    godot::Label *_message_label;
+    godot::Timer *_start_message_timer;
+    godot::Timer *_get_ready_message_timer;
+    godot::Button *_start_button;
+    godot::Timer *_start_button_timer;
+
+public:
+    void _init() {}
+    void _ready();
+    void show_get_ready();
+    void show_game_over();
+    void update_score(const int score);
+    void _on_StartButton_pressed();
+    void _on_StartMessageTimer_timeout();
+    void _on_GetReadyMessageTimer_timeout();
+
+    static void _register_methods();
+};
+
+#endif // HUD_H
+```
+
+
+
+start_game信号告诉 Main 节点，按钮已经被按下。
+
+```
+func show_message(text):
+    $Message.text = text
+    $Message.show()
+    $MessageTimer.start()
+```
+
+
+
+```
+public void ShowMessage(string text)
+{
+    var message = GetNode<Label>("Message");
+    message.Text = text;
+    message.Show();
+
+    GetNode<Timer>("MessageTimer").Start();
+}
+```
+
+
+
+```
+// This code goes in `hud.cpp`.
+#include "hud.hpp"
+
+void HUD::_ready() {
+    _score_label = get_node<godot::Label>("ScoreLabel");
+    _message_label = get_node<godot::Label>("MessageLabel");
+    _start_message_timer = get_node<godot::Timer>("StartMessageTimer");
+    _get_ready_message_timer = get_node<godot::Timer>("GetReadyMessageTimer");
+    _start_button = get_node<godot::Button>("StartButton");
+    _start_button_timer = get_node<godot::Timer>("StartButtonTimer");
+}
+
+void HUD::_register_methods() {
+    godot::register_method("_ready", &HUD::_ready);
+    godot::register_method("show_get_ready", &HUD::show_get_ready);
+    godot::register_method("show_game_over", &HUD::show_game_over);
+    godot::register_method("update_score", &HUD::update_score);
+    godot::register_method("_on_StartButton_pressed", &HUD::_on_StartButton_pressed);
+    godot::register_method("_on_StartMessageTimer_timeout", &HUD::_on_StartMessageTimer_timeout);
+    godot::register_method("_on_GetReadyMessageTimer_timeout", &HUD::_on_GetReadyMessageTimer_timeout);
+    godot::register_signal<HUD>("start_game", godot::Dictionary());
+}
+```
+
+
+
+当我们想要临时显示一条消息时调用此函数，例如“准备就绪”。
+
+```
+func show_game_over():
+    show_message("Game Over")
+    # Wait until the MessageTimer has counted down.
+    yield($MessageTimer, "timeout")
+
+    $Message.text = "Dodge the\nCreeps!"
+    $Message.show()
+    # Make a one-shot timer and wait for it to finish.
+    yield(get_tree().create_timer(1), "timeout")
+    $StartButton.show()
+```
+
+
+
+```
+async public void ShowGameOver()
+{
+    ShowMessage("Game Over");
+
+    var messageTimer = GetNode<Timer>("MessageTimer");
+    await ToSignal(messageTimer, "timeout");
+
+    var message = GetNode<Label>("Message");
+    message.Text = "Dodge the\nCreeps!";
+    message.Show();
+
+    await ToSignal(GetTree().CreateTimer(1), "timeout");
+    GetNode<Button>("StartButton").Show();
+}
+```
+
+
+
+```
+// This code goes in `hud.cpp`.
+// There is no `yield` in GDNative, so we need to have every
+// step be its own method that is called on timer timeout.
+void HUD::show_get_ready() {
+    _message_label->set_text("Get Ready");
+    _message_label->show();
+    _get_ready_message_timer->start();
+}
+
+void HUD::show_game_over() {
+    _message_label->set_text("Game Over");
+    _message_label->show();
+    _start_message_timer->start();
+}
+```
+
+
+
+当玩家失败时调用此函数。它将显示“Game Over” 2 秒，然后返回标题屏幕，并在短暂暂停后显示“Start”按钮。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 当您需要暂停一小段时间时，使用 Timer 节点的替代方法是使用 SceneTree 的 create_timer() 函数。这对于添加延迟非常有用，例如在上面的代码中，我们希望在显示“开始”按钮之前等待一段时间。 |
+
+```
+func update_score(score):
+    $ScoreLabel.text = str(score)
+```
+
+
+
+```
+public void UpdateScore(int score)
+{
+    GetNode<Label>("ScoreLabel").Text = score.ToString();
+}
+```
+
+
+
+```
+// This code goes in `hud.cpp`.
+void HUD::update_score(const int p_score) {
+    _score_label->set_text(godot::Variant(p_score));
+}
+```
+
+
+
+每当分数发生变化时，Main 都会调用此函数。
+
+连接 MessageTimer 的 timeout() 信号和 StartButton 的pressed() 信号，并将以下代码添加到新函数中：
+
+![](images/Snipaste_2022-10-06_00-52-03.png)
+
+![](images/Snipaste_2022-10-06_00-52-40.png)
+
+![](images/Snipaste_2022-10-06_00-53-16.png)
+
+```
+func _on_StartButton_pressed():
+    $StartButton.hide()
+    emit_signal("start_game")
+
+func _on_MessageTimer_timeout():
+    $Message.hide()
+```
+
+
+
+```
+public void OnStartButtonPressed()
+{
+    GetNode<Button>("StartButton").Hide();
+    EmitSignal("StartGame");
+}
+
+public void OnMessageTimerTimeout()
+{
+    GetNode<Label>("Message").Hide();
+}
+```
+
+
+
+```
+// This code goes in `hud.cpp`.
+void HUD::_on_StartButton_pressed() {
+    _start_button_timer->stop();
+    _start_button->hide();
+    emit_signal("start_game");
+}
+
+void HUD::_on_StartMessageTimer_timeout() {
+    _message_label->set_text("Dodge the\nCreeps");
+    _message_label->show();
+    _start_button_timer->start();
+}
+
+void HUD::_on_GetReadyMessageTimer_timeout() {
+    _message_label->hide();
+}
+```
+
+
+
+##### 将 HUD 连接到Main
+
+现在我们已经完成了 HUD 场景的创建，回到 Main。在 Main 中实例化 HUD 场景，就像在 Player 场景中一样。场景树应如下所示，因此请确保您没有遗漏任何内容：
+
+![](images/Snipaste_2022-10-06_00-59-29.png)
+
+现在我们需要将 HUD 功能连接到我们的 Main 脚本。这需要在 Main 场景中添加一些内容：
+
+在节点选项卡中，通过在“连接信号”窗口的“接收器方法”中键入“new_game”，将 HUD 的 start_game 信号连接到主节点的 new_game() 函数。验证绿色连接图标现在是否出现在脚本中的 func new_game() 旁边。
+
+![](images/Snipaste_2022-10-06_01-04-23.png)
+
+在 new_game() 中，更新分数显示并显示“准备就绪”消息：
+
+```
+func new_game():
+	score = 0
+	$Player.start($StartPosition.position)
+	$StartTimer.start()
+	$HUD.updata_score(score)
+	$HUD.show_message("Get Ready")
+```
+
+
+
+```
+var hud = GetNode<HUD>("HUD");
+hud.UpdateScore(Score);
+hud.ShowMessage("Get Ready!");
+```
+
+
+
+```
+_hud->update_score(score);
+_hud->show_get_ready();
+```
+
+
+
+在game_over()中我们需要调用对应的HUD函数：
+
+```
+func game_over():
+	$ScoreTimer.stop()
+	$MobTimer.stop()
+	$HUD.show_game_over()
+```
+
+
+
+```
+GetNode<HUD>("HUD").ShowGameOver();
+```
+
+
+
+```
+_hud->show_game_over();
+```
+
+
+
+最后，将其添加到 _on_ScoreTimer_timeout() 以使显示与变化的分数保持同步：
+
+```
+func _on_ScoreTimer_timeout():
+	score += 1
+	$HUD.update_score(score)
+```
+
+
+
+```
+GetNode<HUD>("HUD").UpdateScore(Score);
+```
+
+
+
+```
+_hud->update_score(score);
+```
+
+
+
+现在你可以开始玩了！单击“播放项目”按钮。您将被要求选择一个主场景，因此选择 Main.tscn。
+
+
+
+##### 移除旧的小怪
+
+如果您玩到“Game Over”然后立即开始新游戏，则上一场比赛的小怪可能仍会出现在屏幕上。如果他们在新游戏开始时全部消失会更好。我们只需要一种方法来告诉所有的小怪移除自己。我们可以使用“组”功能来做到这一点。
+
+在Mob场景中，选择根节点并点击检查器旁边的 "节点 "标签（也就是你找到节点信号的地方）。在 "信号 "旁边，点击 "分组"，你可以输入一个新的组名并点击 "添加"。
+
+![](images/Snipaste_2022-10-06_01-12-24.png)
+
+现在所有的小怪都将在“mobs”组中。然后我们可以将以下行添加到 Main 中的 new_game() 函数中：
+
+```
+func new_game():
+	get_tree().call_group("mobs", "queue_free")
+	score = 0
+	$Player.start($StartPosition.position)
+	$StartTimer.start()
+	$HUD.update_score(score)
+	$HUD.show_message("Get Ready")
+```
+
+
+
+```
+// Note that for calling Godot-provided methods with strings,
+// we have to use the original Godot snake_case name.
+GetTree().CallGroup("mobs", "queue_free");
+```
+
+
+
+```
+get_tree()->call_group("mobs", "queue_free");
+```
+
+
+
+call_group() 函数在组中的每个节点上调用命名函数 - 在这种情况下，我们告诉每个小怪删除自己。
+
+游戏在这一点上基本完成。在下一部分和最后一部分中，我们将通过添加背景、循环音乐和一些键盘快捷键来稍微完善它。
+
+完整脚本HUD.gd
+
+```
+extends CanvasLayer
+
+signal start_game
+
+func show_message(text):
+	$Message.text = text
+	$Message.show()
+	$MessageTimer.start()
+
+func update_score(score):
+	$ScoreLabel.text = str(score)
+
+func show_game_over():
+	show_message("Game Over")
+	# Wait until the MessageTimer has counted down.
+	yield($MessageTimer, "timeout")
+	
+	$Message.text = "Doge the\nCreeps!"
+	$Message.show()
+	# Make a one-shot timer and wait for it to finish.
+	yield(get_tree().create_timer(1),"timeout")
+	$StartButton.show()
+
+func _on_StartButton_pressed():
+	$StartButton.hide()
+	emit_signal("start_game")
+
+func _on_MessageTimer_timeout():
+	$Message.hide()
+```
+
+
+
+#### 收尾工作
+
+我们现在已经完成了我们游戏的所有功能。下面是一些剩余的步骤，以增加一些 "料"，改善游戏体验。
+
+随意用自己的想法扩展游戏玩法。
+
+##### 背景
+
+默认的灰色背景不是很吸引人，所以让我们改变它的颜色。一种方法是使用 <font color = "green">ColorRect </font> 节点。使其成为 Main 下的第一个节点，以便将其绘制在其他节点后面。 <font color = "green">ColorRect </font>只有一个属性：颜色。选择您喜欢的颜色并选择“布局”->“整个矩形”，使其覆盖屏幕。
+
+![](images/Snipaste_2022-10-06_03-07-30.png)
+
+译者注：如图所示，成为Main的第一个节点，不然开始游戏时会遮挡玩家。
+
+![](images/Snipaste_2022-10-06_03-10-08.png)
+
+如果有背景图像，您还可以使用 <font color = "green">TextureRect</font> 节点添加背景图像。
+
+##### 音效
+
+声音和音乐可能是增加游戏体验吸引力的最有效的方式。在你的游戏资产文件夹中，你有两个声音文件。"House In a Forest Loop.ogg "用于背景音乐，"gameover.wav "用于玩家失败时。
+
+译者注：在项目中创建一个Music文件夹，将dodge_the_creeps/art  复制gameover.wav和House In a Forest Loop.ogg到项目的 Music中。
+
+添加两个 AudioStreamPlayer 节点作为 Main 的子节点。给其中一个命名为Music，另一个命名为DeathSound。在每个节点上，点击Stream属性，选择 "加载"，并选择相应的音频文件。
+
+要播放音乐，请在 new_game() 函数中添加 $Music.play() 并在 game_over() 函数中添加 $Music.stop()。
+
+最后，在 game_over() 函数中添加 $DeathSound.play()和  $Music.stop() 。
+
+```
+func new_game():
+	get_tree().call_group("mobs", "queue_free")
+	score = 0
+	$Player.start($StartPosition.position)
+	$StartTimer.start()
+	$HUD.update_score(score)
+	$HUD.show_message("Get Ready")
+	$Music.play()
+```
+
+
+
+```
+func game_over():
+	$ScoreTimer.stop()
+	$MobTimer.stop()
+	$DeathSound.play()
+```
+
+
+
+##### 键盘快捷键
+
+由于游戏是通过键盘控制进行的，如果我们也可以通过按键盘上的键来启动游戏，那将很方便。我们可以使用 <font color = "green">Button</font> 节点的“Shortcut”属性来做到这一点。
+
+在上一课中，我们创建了四个输入动作来移动角色。我们将创建一个类似的输入动作来映射到开始按钮。
+
+选择“项目”->“项目设置”，然后单击“输入映射”选项卡。以与您创建移动输入动作相同的方式，创建一个名为 start_game 的新输入动作并为 Enter 键添加一个键映射。
+
+在HUD场景中，选择 <font color = "green">StartButton</font> 并在检查器中找到它的Shortcut属性。选择 "新建ShortCut "并点击 "新建ShortCut "项目。将出现第二个快捷方式属性。选择 "新建InputEventAction "并点击新的 "InputEventAction"。最后，在Action属性中，输入start_game这个名字。
+
+![](images/Snipaste_2022-10-06_03-36-59.png)
+
+![](images/Snipaste_2022-10-06_03-37-57.png)
+
+现在，当开始按钮出现时，您可以单击它或按 Enter 键开始游戏。
+
+至此，您在 Godot 中完成了您的第一个 2D 游戏。
+
+你接触到制作一个玩家控制的角色，在游戏板上随机生成的敌人，计算分数，实现游戏结束和重播，用户界面，声音等等。恭喜！
+
+还有很多东西要学，但你可以花一点时间来欣赏你所取得的成就。
+
+当你准备好后，你可以继续你的第一个 3D 游戏，学习在 Godot 中从头开始创建一个完整的 3D 游戏。
+
+教程
+https://www.aliyundrive.com/s/v2cV4As4MXJ 提取码：8888
+
+译者注：前缀带KJ 是我自己写的工程文件。关于Player.tscn 中的粒子特效 ，自己在Player节点下添加Particles2D，在检查器里展开所有被折叠的，照着自己写。
+
+------
+
+## 您的第一个3D游戏
+
+在这个循序渐进的教程系列中，你将用Godot创建你的第一个完整的3D游戏。在本系列课程结束时，你将拥有一个简单但已完成的自己的项目，就像下面的gif动画
+
+![](images/6l.gif)
+
+我们在这里要编写的游戏与你的第一个2D游戏类似，但有一个变化：你现在可以跳了，你的目标是压扁小怪。这样，你既能复习到你在前面的教程中所学到的内容，又能在此基础上使用新的代码和功能。
+
+您将学会：
+
+- 使用跳跃机制处理 3D 坐标。
+- 使用运动学实体移动3D角色并检测它们何时以及如何碰撞。
+- 使用物理层和节点组来检测与特定实体之间的交互。
+- 通过在固定的时间间隔内实例化怪物来编码基本的程序性游戏。
+- 设计运动动画并在运行时改变它的速度。
+- 在 3D 游戏上绘制用户界面。
+
+还有更多内容
+
+本教程适用于遵循完整入门系列的初学者。我们将从详细说明开始慢慢开始，并在执行类似步骤时缩短说明。如果您是一位经验丰富的程序员，您可以在此处浏览完整的演示源代码：
+
+https://github.com/godotengine/godot-3d-dodge-the-creeps
+
+教程
+https://www.aliyundrive.com/s/v2cV4As4MXJ 提取码：8888
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
