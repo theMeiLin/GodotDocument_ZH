@@ -3178,39 +3178,440 @@ void Player::start(const godot::Vector2 p_position) {
 
 随着玩家部分的工作完成，我们将在下一课中研究敌人。
 
+完整代码Player.gd
+
+```
+extends Area2D
+
+export var speed = 400 # How fast the player will move (pixels/sec).
+var sreen_size # Size of the game window.
+signal hit
+
+
+func _ready():
+	sreen_size = get_viewport_rect().size
+	hide()
+
+
+func _process(delta):
+	var velocity = Vector2.ZERO # The player's movement vector.
+	if Input.is_action_just_pressed("move_right"):
+		velocity.x += 1
+	if Input.is_action_just_pressed("move_left"):
+		velocity.x -= 1
+	if Input.is_action_just_pressed("move_down"):
+		velocity.y += 1
+	if Input.is_action_just_pressed("move_up"):
+		velocity.y -= 1
+	
+	if velocity.length() > 0:
+		velocity = velocity.normalized() * speed
+		$AnimatedSprite.play()
+	else:
+		$AnimatedSprite.stop()
+	
+	position += velocity * delta
+	position.x = clamp(position.x, 0, sreen_size.x)
+	position.y = clamp(position.y, 0, sreen_size.y)
+	
+	if velocity.x != 0:
+		$AnimatedSprite.animation = "walk"
+		$AnimatedSprite.flip_v = false
+		# See the note below about boolean assignment.
+		$AnimatedSprite.flip_h = velocity.x < 0
+	elif velocity.y != 0:
+		$AnimatedSprite.animation = "up"
+		$AnimatedSprite.flip_v = velocity.y > 0
+
+
+func _on_Player_body_entered(body):
+	hide() # Player disappears after being hit.
+	emit_signal("hit")
+	# Must be deferred as we can't change physics properties on a physics callback.
+	$CollisionShape2D.set_deferred("disabled",true)
+
+
+func start(pos):
+	position = pos
+	show()
+	$CollisionShape2D.disabled = false
+
+```
+
+
+
 #### 创建敌人
 
+现在是时候制作我们的玩家要躲避的敌人了。他们的行为不会很复杂：怪物将在屏幕的边缘随机产生，选择一个随机的方向，并在一条直线上移动。
+
+我们将创建一个 Mob 场景，然后我们可以实例化它以在游戏中创建任意数量的独立生物。
+
+##### 节点设置
+
+点击场景->新建场景，并添加以下节点：
+
+- <font color = "blue">RigidBody2D</font>（命名为 Mob）
+  - <font color = "blue">AnimatedSprite</font>
+  - <font color = "blue">CollisionShape2D</font>
+  - <font color = "blue">VisibilityNotifier2D</font>
+
+不要忘记设置子项，使他们不能被选中，就像你在 Player 场景中所做的那样。
+
+在 <font color = "blue">RigidBody2D</font> 属性中，将 Gravity Scale 设置为 0，这样生物就不会向下坠落。此外，在 CollisionObejct2D部分下，单击 Mask 属性并取消选中第一个框。这将确保小怪不会相互碰撞。
+
+![](images/Snipaste_2022-10-05_17-54-55.png)
+
+设置<font color = "blue">AnimatedSprite</font>，就像为玩家所做的那样。这一次，我们有 3 个动画：fly、swim和walk。艺术文件夹中的每个动画都有两个图像。
+
+译者注：<font color = "blue">AnimatedSprite</font>节点，Frames属性，新建SpriteFrames，点击SpriteFrames进入动画编辑器
+
+![](images/Snipaste_2022-10-05_18-00-52.png)
+
+将所有动画的“速度 (FPS)”调整为 3。
+
+![](images/5.gif)
+
+将检查器中的 Playing 属性设置为“On”。
+
+![](images/Snipaste_2022-10-05_18-03-48.png)
+
+我们将随机选择其中一种动画，这样小怪就会有一些变化。
+
+与玩家图像一样，这些生物图像也需要按比例缩小。将 <font color = "blue">AnimatedSprite</font> 的 Scale 属性设置为 (0.75, 0.75)。
+
+![](images/Snipaste_2022-10-05_18-06-11.png)
+
+如同在Player场景中，为碰撞添加一个CapsuleShape2D。为了使形状与图像对齐，你需要将Rotation Degrees属性设置为90（在检查器的 "Transform "下）。
+
+![](images/Snipaste_2022-10-05_18-09-27.png)
+
+保存场景。
+
+##### 敌人脚本
+
+给Mob添加脚本，如下所示：
+
+```
+extends RigidBody2D
+```
 
 
 
+```
+public class Mob : RigidBody2D
+{
+    // Don't forget to rebuild the project.
+}
+```
 
 
 
+```
+// Copy `player.gdns` to `mob.gdns` and replace `Player` with `Mob`.
+// Attach the `mob.gdns` file to the Mob node.
+
+// Create two files `mob.cpp` and `mob.hpp` next to `entry.cpp` in `src`.
+// This code goes in `mob.hpp`. We also define the methods we'll be using here.
+#ifndef MOB_H
+#define MOB_H
+
+#include <AnimatedSprite.hpp>
+#include <Godot.hpp>
+#include <RigidBody2D.hpp>
+
+class Mob : public godot::RigidBody2D {
+    GODOT_CLASS(Mob, godot::RigidBody2D)
+
+    godot::AnimatedSprite *_animated_sprite;
+
+public:
+    void _init() {}
+    void _ready();
+    void _on_VisibilityNotifier2D_screen_exited();
+
+    static void _register_methods();
+};
+
+#endif // MOB_H
+```
+
+译者注：Mob右键添加脚本
+
+![](images/Snipaste_2022-10-05_18-11-40.png)
+
+现在我们来看看脚本的其余部分。在_ready()中，我们播放动画并随机选择三种动画类型中的一种：
+
+```
+func _ready():
+    $AnimatedSprite.playing = true
+    var mob_types = $AnimatedSprite.frames.get_animation_names()
+    $AnimatedSprite.animation = mob_types[randi() % mob_types.size()]
+```
 
 
 
+```
+public override void _Ready()
+{
+    var animSprite = GetNode<AnimatedSprite>("AnimatedSprite");
+    animSprite.Playing = true;
+    string[] mobTypes = animSprite.Frames.GetAnimationNames();
+    animSprite.Animation = mobTypes[GD.Randi() % mobTypes.Length];
+}
+```
 
 
 
+```
+// This code goes in `mob.cpp`.
+#include "mob.hpp"
+
+#include <RandomNumberGenerator.hpp>
+#include <SpriteFrames.hpp>
+
+void Mob::_ready() {
+    godot::Ref<godot::RandomNumberGenerator> random = godot::RandomNumberGenerator::_new();
+    random->randomize();
+    _animated_sprite = get_node<godot::AnimatedSprite>("AnimatedSprite");
+    _animated_sprite->_set_playing(true);
+    godot::PoolStringArray mob_types = _animated_sprite->get_sprite_frames()->get_animation_names();
+    _animated_sprite->set_animation(mob_types[random->randi() % mob_types.size()]);
+}
+```
 
 
 
+首先，我们从 <font color = "blue">AnimatedSprite</font> 的 frames 属性中获取动画名称列表。这将返回一个包含所有三个动画名称的数组：[“walk”、“swim”、“fly”]。
+
+然后，我们需要在 0 和 2 之间选择一个随机数，以从列表中选择其中一个名称（数组索引从 0 开始）。 randi() % n 选择 0 到 n-1 之间的随机整数。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 如果你想让你的 "随机 "数字序列在每次运行场景时都不同，你必须使用randomize()。我们将在主场景中使用randomize()，所以我们在这里不需要它。 |
+
+最后一点是让小怪在离开屏幕时删除自己。连接 <font color = "blue">VisibilityNotifier2D</font> 节点的 screen_exited() 信号并添加以下代码：
+
+```
+func _on_VisibilityNotifier2D_screen_exited():
+    queue_free()
+```
 
 
 
+```
+public void OnVisibilityNotifier2DScreenExited()
+{
+    QueueFree();
+}
+```
 
 
 
+```
+// This code goes in `mob.cpp`.
+void Mob::_on_VisibilityNotifier2D_screen_exited() {
+    queue_free();
+}
+```
 
 
 
+这样就完成了 Mob 场景。
+
+随着玩家和敌人的准备就绪，在下一部分，我们将把他们带到一个新的场景中。我们将使敌人在游戏边界周围随机产生并向前移动，把我们的项目变成一个可玩的游戏。
+
+#### 主要游戏场景
+
+现在是时候将我们所做的一切整合到一个可玩的游戏场景中了。
+
+创建一个新场景并添加一个名为 Main 的节点。 （我们使用 Node 而不是 Node2D 的原因是因为这个节点将是一个处理游戏逻辑的容器。它本身不需要 2D 功能。）
+
+点击实例按钮（用一个连锁图标表示），选择你保存的Player.tscn。
+
+![](images/Snipaste_2022-10-05_19-52-03.png)
+
+![](images/Snipaste_2022-10-05_19-52-49.png)
+
+现在，添加以下节点作为Main的子节点，并如图所示命名它们（数值单位为秒）。
+
+- Timer（名为MobTimer）--控制小怪产生的频率
+- Timer（名为ScoreTimer）--每秒递增分数
+- Timer（名为StartTimer）--在开始前给出一个延迟。
+- <font color = "blue">Position2D</font>（名为StartPosition）--表示玩家的起始位置。
+
+![](images/Snipaste_2022-10-05_19-56-32.png)
+
+设置每个 Timer 节点的等待时间属性，如下所示：
+
+- MobTimer: 0.5
+- ScoreTimer: 1
+- StartTimer：2
+
+另外，将 StartTimer 的 One Shot 属性设置为“On”，并将 StartPosition 节点的 Position 设置为 (240, 450)。
+
+![](images/Snipaste_2022-10-05_20-00-02.png)
+
+##### 生成小怪
+
+主节点将产生新的怪物，我们希望他们出现在屏幕边缘的一个随机位置。将<font color = "blue">Path2D</font>节点添加为Main的子节点并命名为 MobPath 。选择Path2D时，您将在编辑器的顶部看到一些新按钮：
+
+![](images/Snipaste_2022-10-05_20-03-43.png)
+
+选择中间的一个（“添加点”）并通过单击在显示的角落添加点来绘制路径。要使点捕捉到网格，请确保同时选中“使用网格捕捉”和“使用捕捉”。这些选项可以在“锁定”按钮的左侧找到，分别在一些点和相交线旁边显示为磁铁。
+
+![](images/Snipaste_2022-10-05_20-10-08.png)
+
+| <font color = "green">重要</font>                        |
+| -------------------------------------------------------- |
+| 按顺时针顺序绘制路径，否则你的小怪会向外而不是向内生成！ |
+
+![](images/6.gif)
+
+在图像中放置点 4 后，单击“关闭曲线”按钮，您的曲线将完成。
+
+现在定义了路径，添加一个 <font color = "blue">PathFollow2D</font> 节点作为 MobPath 的子节点，并将其命名为 MobSpawnLocation。该节点在移动时会自动旋转并跟随路径，因此我们可以使用它来选择沿路径的随机位置和方向。
+
+您的场景应如下所示：
+
+![](images/Snipaste_2022-10-05_20-14-40.png)
+
+##### 主要脚本
+
+给Main添加一个脚本。在脚本的顶部，我们使用导出（PackedScene）来让我们选择我们想要实例的Mob场景。
+
+![](images/Snipaste_2022-10-05_20-16-21.png)
+
+```
+extends Node
+
+export(PackedScene) var mob_scene
+var score
+```
 
 
 
+```
+public class Main : Node
+{
+    // Don't forget to rebuild the project so the editor knows about the new export variable.
+
+#pragma warning disable 649
+    // We assign this in the editor, so we don't need the warning about not being assigned.
+    [Export]
+    public PackedScene MobScene;
+#pragma warning restore 649
+
+    public int Score;
+}
+```
 
 
 
+```
+// Copy `player.gdns` to `main.gdns` and replace `Player` with `Main`.
+// Attach the `main.gdns` file to the Main node.
+
+// Create two files `main.cpp` and `main.hpp` next to `entry.cpp` in `src`.
+// This code goes in `main.hpp`. We also define the methods we'll be using here.
+#ifndef MAIN_H
+#define MAIN_H
+
+#include <AudioStreamPlayer.hpp>
+#include <CanvasLayer.hpp>
+#include <Godot.hpp>
+#include <Node.hpp>
+#include <PackedScene.hpp>
+#include <PathFollow2D.hpp>
+#include <RandomNumberGenerator.hpp>
+#include <Timer.hpp>
+
+#include "hud.hpp"
+#include "player.hpp"
+
+class Main : public godot::Node {
+    GODOT_CLASS(Main, godot::Node)
+
+    int score;
+    HUD *_hud;
+    Player *_player;
+    godot::Node2D *_start_position;
+    godot::PathFollow2D *_mob_spawn_location;
+    godot::Timer *_mob_timer;
+    godot::Timer *_score_timer;
+    godot::Timer *_start_timer;
+    godot::AudioStreamPlayer *_music;
+    godot::AudioStreamPlayer *_death_sound;
+    godot::Ref<godot::RandomNumberGenerator> _random;
+
+public:
+    godot::Ref<godot::PackedScene> mob_scene;
+
+    void _init() {}
+    void _ready();
+    void game_over();
+    void new_game();
+    void _on_MobTimer_timeout();
+    void _on_ScoreTimer_timeout();
+    void _on_StartTimer_timeout();
+
+    static void _register_methods();
+};
+
+#endif // MAIN_H
+```
 
 
 
+我们还在此处添加了对 randomize() 的调用，以便随机数生成器在每次运行游戏时生成不同的随机数：
+
+```
+func _ready():
+    randomize()
+```
+
+
+
+```
+public override void _Ready()
+{
+    GD.Randomize();
+}
+```
+
+
+
+```
+// This code goes in `main.cpp`.
+#include "main.hpp"
+
+#include <SceneTree.hpp>
+
+#include "mob.hpp"
+
+void Main::_ready() {
+    _hud = get_node<HUD>("HUD");
+    _player = get_node<Player>("Player");
+    _start_position = get_node<godot::Node2D>("StartPosition");
+    _mob_spawn_location = get_node<godot::PathFollow2D>("MobPath/MobSpawnLocation");
+    _mob_timer = get_node<godot::Timer>("MobTimer");
+    _score_timer = get_node<godot::Timer>("ScoreTimer");
+    _start_timer = get_node<godot::Timer>("StartTimer");
+    // Uncomment these after adding the nodes in the "Sound effects" section of "Finishing up".
+    //_music = get_node<godot::AudioStreamPlayer>("Music");
+    //_death_sound = get_node<godot::AudioStreamPlayer>("DeathSound");
+    _random = (godot::Ref<godot::RandomNumberGenerator>)godot::RandomNumberGenerator::_new();
+    _random->randomize();
+}
+```
+
+
+
+单击 Main 节点，您将在检查器的“Script Variables”下看到 Mob Scene 属性。
+
+您可以通过两种方式分配此属性的值：
+
+- 将 Mob.tscn 从“文件系统”停靠栏拖放到 Mob Scene 属性中。
+- 单击“[empty]”旁边的向下箭头，然后选择“加载”。选择 Mob.tscn。
+
+![](images/Snipaste_2022-10-05_20-21-07.png)
 
