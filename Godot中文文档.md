@@ -1,5 +1,7 @@
 # 目录
 
+[TOC]
+
 
 
 # 常规
@@ -2559,7 +2561,7 @@ Godot 中的任何节点都会在发生特定事件时发出信号，例如按�
 
 您会发现另一个系列，您将在其中创建类似的游戏，但使用 3D。不过，我们建议您从这个开始。
 
-#### 为什么要从 2D 开始？
+为什么要从 2D 开始？
 
 3D游戏比2D游戏要复杂得多。在了解游戏开发过程和如何很好地使用Godot之前，你最好还是坚持做2D。
 
@@ -2686,3 +2688,529 @@ Godot 将在场景树中的节点旁边显示一个警告图标。你现在可�
 确保在进行这些更改后再次保存场景。
 
 在下一部分中，我们将向播放器节点添加一个脚本来移动它并为其设置动画。然后，我们将设置碰撞检测以了解玩家何时被某物击中。
+
+#### 编写玩家代码
+
+在本课中，我们将添加玩家运动、动画，并将其设置为检测碰撞。
+
+为此，我们需要添加一些无法从内置节点获得的功能，因此我们将添加一个脚本。单击 Player 节点，然后单击“附加脚本”按钮：
+
+![](images/Snipaste_2022-10-05_02-04-40.png)
+
+在脚本设置窗口中，您可以保留默认设置。只需点击“创建”：
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 如果您正在创建 C# 脚本或其他语言，请在点击创建之前从语言下拉菜单中选择语言。 |
+
+![](images/Snipaste_2022-10-05_16-18-33.png)
+
+| 注意事项                                                  |
+| --------------------------------------------------------- |
+| 如果这是您第一次遇到 GDScript，请在继续之前阅读脚本语言。 |
+
+首先声明这个对象需要的成员变量：
+
+```
+extends Area2D
+
+export var speed = 400 # How fast the player will move (pixels/sec).
+var screen_size # Size of the game window.
+```
+
+
+
+```
+using Godot;
+using System;
+
+public class Player : Area2D
+{
+    [Export]
+    public int Speed = 400; // How fast the player will move (pixels/sec).
+
+    public Vector2 ScreenSize; // Size of the game window.
+}
+```
+
+
+
+```
+// A `player.gdns` file has already been created for you. Attach it to the Player node.
+
+// Create two files `player.cpp` and `player.hpp` next to `entry.cpp` in `src`.
+// This code goes in `player.hpp`. We also define the methods we'll be using here.
+#ifndef PLAYER_H
+#define PLAYER_H
+
+#include <AnimatedSprite.hpp>
+#include <Area2D.hpp>
+#include <CollisionShape2D.hpp>
+#include <Godot.hpp>
+#include <Input.hpp>
+
+class Player : public godot::Area2D {
+    GODOT_CLASS(Player, godot::Area2D)
+
+    godot::AnimatedSprite *_animated_sprite;
+    godot::CollisionShape2D *_collision_shape;
+    godot::Input *_input;
+    godot::Vector2 _screen_size; // Size of the game window.
+
+public:
+    real_t speed = 400; // How fast the player will move (pixels/sec).
+
+    void _init() {}
+    void _ready();
+    void _process(const double p_delta);
+    void start(const godot::Vector2 p_position);
+    void _on_Player_body_entered(godot::Node2D *_body);
+
+    static void _register_methods();
+};
+
+#endif // PLAYER_H
+```
+
+在第一个变量 <font color = "red">speed</font> 上使用 <font color = "red">export</font> 关键字允许我们在检查器中设置其值。这对于你希望能够像节点的内置属性一样调整的值来说是很方便的。点击 <font color = "red">Player</font> 节点，你会看到该属性现在出现在检查器的 "脚本变量 "部分。记住，如果你改变了这里的值，它将覆盖写在脚本中的值。
+
+| <font color = "#ff8c00">警告</font>                          |
+| ------------------------------------------------------------ |
+| 如果您使用的是 C#，则无论何时要查看新的导出变量或信号，都需要（重新）构建项目程序集。可以通过单击编辑器窗口底部的单词“Mono”来手动触发此构建以显示 Mono 面板，然后单击“构建项目”按钮。 |
+
+![](images/Snipaste_2022-10-05_16-27-03.png)
+
+当一个节点进入场景树时，_ready()函数会被调用，这是一个寻找游戏窗口尺寸的好时机。
+
+```
+func _ready():
+    screen_size = get_viewport_rect().size
+```
+
+
+
+```
+public override void _Ready()
+{
+    ScreenSize = GetViewportRect().Size;
+}
+```
+
+
+
+```
+// This code goes in `player.cpp`.
+#include "player.hpp"
+
+void Player::_ready() {
+    _animated_sprite = get_node<godot::AnimatedSprite>("AnimatedSprite");
+    _collision_shape = get_node<godot::CollisionShape2D>("CollisionShape2D");
+    _input = godot::Input::get_singleton();
+    _screen_size = get_viewport_rect().size;
+}
+```
+
+现在我们可以使用_process()函数来定义玩家将做什么。_process()每一帧都被调用，所以我们将用它来更新我们的游戏元素，我们预计这些元素会经常变化。对于玩家，我们需要做以下工作：
+
+- 检查输入。
+- 向给定的方向移动。
+- 播放相应的动画。
+
+首先，我们需要检查输入——玩家是否按下了键？对于这个游戏，我们有 4 个方向输入要检查。输入动作在“输入映射”下的项目设置中定义。在这里，您可以定义自定义事件并为它们分配不同的键、鼠标事件或其他输入。对于这个游戏，我们将箭头键映射到四个方向。
+
+点击项目->项目设置，打开项目设置窗口，点击顶部的输入地图标签。在顶部栏中输入 "move_right"，点击 "添加 "按钮，添加move_right动作。
+
+![](images/Snipaste_2022-10-05_16-33-31.png)
+
+我们需要为这个动作分配一个键。单击右侧的“+”图标，然后单击下拉菜单中的“按键”选项。一个对话框要求您输入所需的键。按键盘上的向右箭头，然后单击“确定”。
+
+![](images/Snipaste_2022-10-05_16-35-29.png)
+
+重复这些步骤以添加另外三个映射：
+
+1. move_left 映射到左箭头键。
+2. move_up 映射到向上箭头键。
+3. 并且 move_down 映射到向下箭头键。
+
+您的输入映射选项卡应如下所示：
+
+![](images/Snipaste_2022-10-05_16-38-01.png)
+
+单击“关闭”按钮关闭项目设置。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 我们只将一个按键映射到每个输入动作，但你可以将多个按键、操纵杆按钮或鼠标按钮映射到同一个输入动作。 |
+
+您可以使用 Input.is_action_pressed() 检测是否按下了某个键，如果按下则返回 true，否则返回 false。
+
+```
+func _process(delta):
+    var velocity = Vector2.ZERO # The player's movement vector.
+    if Input.is_action_pressed("move_right"):
+        velocity.x += 1
+    if Input.is_action_pressed("move_left"):
+        velocity.x -= 1
+    if Input.is_action_pressed("move_down"):
+        velocity.y += 1
+    if Input.is_action_pressed("move_up"):
+        velocity.y -= 1
+
+    if velocity.length() > 0:
+        velocity = velocity.normalized() * speed
+        $AnimatedSprite.play()
+    else:
+        $AnimatedSprite.stop()
+```
+
+
+
+```
+public override void _Process(float delta)
+{
+    var velocity = Vector2.Zero; // The player's movement vector.
+
+    if (Input.IsActionPressed("move_right"))
+    {
+        velocity.x += 1;
+    }
+
+    if (Input.IsActionPressed("move_left"))
+    {
+        velocity.x -= 1;
+    }
+
+    if (Input.IsActionPressed("move_down"))
+    {
+        velocity.y += 1;
+    }
+
+    if (Input.IsActionPressed("move_up"))
+    {
+        velocity.y -= 1;
+    }
+
+    var animatedSprite = GetNode<AnimatedSprite>("AnimatedSprite");
+
+    if (velocity.Length() > 0)
+    {
+        velocity = velocity.Normalized() * Speed;
+        animatedSprite.Play();
+    }
+    else
+    {
+        animatedSprite.Stop();
+    }
+}
+```
+
+
+
+```
+// This code goes in `player.cpp`.
+void Player::_process(const double p_delta) {
+    godot::Vector2 velocity(0, 0);
+
+    velocity.x = _input->get_action_strength("move_right") - _input->get_action_strength("move_left");
+    velocity.y = _input->get_action_strength("move_down") - _input->get_action_strength("move_up");
+
+    if (velocity.length() > 0) {
+        velocity = velocity.normalized() * speed;
+        _animated_sprite->play();
+    } else {
+        _animated_sprite->stop();
+    }
+}
+```
+
+我们首先把 velocity 设置为(0，0) 。在默认情况下，玩家不应该移动。然后，我们检查每一个输入，并与之相加/相减，得到一个总velocity的方向。例如，如果你同时按住右 和 下 ，得到的向量将是 (1, 1)。在这种情况下，由于我们增加了一个水平和一个垂直运动，玩家在对角线上的移动速度会比只在水平方向上的移动速度快。
+
+如果我们对速度进行归一化，我们可以防止这种情况发生，这意味着我们将其长度设置为 1 ，然后乘以所需的速度。这意味着不再有快速的对角线移动。 
+
+| <font color = "green">技巧</font>                            |
+| ------------------------------------------------------------ |
+| 如果您以前从未使用过向量数学，或者需要复习，您可以在Godot中的向量数学查看向量用法的说明。了解这些是很好的，但对本教程的其余部分来说并不是必须的。 |
+
+我们还检查玩家是否在移动，以便我们可以在 AnimatedSprite 上调用 play() 或 stop()。
+
+| <font color = "green">技巧</font>                            |
+| ------------------------------------------------------------ |
+| $ 是 get_node() 的简写。所以在上面的代码中，$AnimatedSprite.play() 和 get_node("AnimatedSprite").play() 是一样的。<br/>在 GDScript 中，$ 返回当前节点的相对路径中的节点，如果未找到该节点，则返回 null。由于 AnimatedSprite 是当前节点的子节点，我们可以使用 $AnimatedSprite。 |
+
+现在我们有了移动方向，我们可以更新玩家的位置。我们还可以使用clamp() 来防止它离开屏幕。钳制一个值意味着将其限制在给定的范围内。将以下内容添加到 _process 函数的底部（确保它没有在 else 下缩进）：
+
+```
+position += velocity * delta
+position.x = clamp(position.x, 0, screen_size.x)
+position.y = clamp(position.y, 0, screen_size.y)
+```
+
+
+
+```
+Position += velocity * delta;
+Position = new Vector2(
+    x: Mathf.Clamp(Position.x, 0, ScreenSize.x),
+    y: Mathf.Clamp(Position.y, 0, ScreenSize.y)
+);
+```
+
+
+
+```
+godot::Vector2 position = get_position();
+position += velocity * (real_t)p_delta;
+position.x = godot::Math::clamp(position.x, (real_t)0.0, _screen_size.x);
+position.y = godot::Math::clamp(position.y, (real_t)0.0, _screen_size.y);
+set_position(position);
+```
+
+
+
+| <font color = "green">技巧</font>                            |
+| ------------------------------------------------------------ |
+| _process() 函数中的 delta 参数是指帧长度 - 前一帧完成所花费的时间量。使用此值可确保即使帧速率发生变化，您的移动也将保持一致。 |
+
+单击“运行场景”（F6，macOS 上的 Cmd + R）并确认您可以在屏幕上向各个方向移动播放器。
+
+| <font color = "#ff8c00">警告</font>                          |
+| ------------------------------------------------------------ |
+| 如果您在“调试器”面板中收到错误消息                           |
+| Attempt to call function 'play' in base 'null instance' on a null instance |
+| 这可能意味着您拼错了 AnimatedSprite 节点的名称。节点名称区分大小写，并且 $NodeName 必须与您在场景树中看到的名称匹配。 |
+
+##### 选择动画
+
+现在玩家可以移动了，我们需要根据方向改变AnimatedSprite正在播放的动画。我们有 "walk "动画，它显示玩家向右行走。这个动画应该使用 flip_h 属性在水平方向上翻转，以便向左移动。我们还有一个 "up "动画，它应该用flip_v来垂直翻转，以便向下移动。让我们把这段代码放在 _process() 函数的最后。
+
+```
+if velocity.x != 0:
+    $AnimatedSprite.animation = "walk"
+    $AnimatedSprite.flip_v = false
+    # See the note below about boolean assignment.
+    $AnimatedSprite.flip_h = velocity.x < 0
+elif velocity.y != 0:
+    $AnimatedSprite.animation = "up"
+    $AnimatedSprite.flip_v = velocity.y > 0
+```
+
+
+
+```
+if (velocity.x != 0)
+{
+    animatedSprite.Animation = "walk";
+    animatedSprite.FlipV = false;
+    // See the note below about boolean assignment.
+    animatedSprite.FlipH = velocity.x < 0;
+}
+else if (velocity.y != 0)
+{
+    animatedSprite.Animation = "up";
+    animatedSprite.FlipV = velocity.y > 0;
+}
+```
+
+
+
+```
+if (velocity.x != 0) {
+    _animated_sprite->set_animation("walk");
+    _animated_sprite->set_flip_v(false);
+    // See the note below about boolean assignment.
+    _animated_sprite->set_flip_h(velocity.x < 0);
+} else if (velocity.y != 0) {
+    _animated_sprite->set_animation("up");
+    _animated_sprite->set_flip_v(velocity.y > 0);
+}
+```
+
+
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 上面代码中的布尔赋值是程序员常用的简写。由于我们正在进行比较测试（布尔值）并分配一个布尔值，因此我们可以同时进行两者。考虑这段代码与上面的单行布尔赋值： |
+| if velocity.x < 0:                                           |
+| $AnimatedSprite.flip_h = true                                |
+| else:                                                        |
+| $AnimatedSprite.flip_h = false                               |
+
+再次播放场景并检查每个方向的动画是否正确。
+
+| <font color = "green">技巧</font>                            |
+| ------------------------------------------------------------ |
+| 这里的一个常见错误是输入错误的动画名称。 SpriteFrames 面板中的动画名称必须与您在代码中键入的内容相匹配。如果您将动画命名为“Walk”，则还必须在代码中使用大写“W”。 |
+
+当您确定移动正常工作时，将此行添加到 _ready()，以便游戏开始时玩家将被隐藏：
+
+```
+hide()
+```
+
+
+
+```
+Hide();
+```
+
+
+
+```
+hide();
+```
+
+
+
+##### 准备碰撞
+
+我们希望 Player 检测到它何时被敌人击中，但我们还没有制造任何敌人！没关系，因为我们将使用 Godot 的信号功能来使其工作。
+
+在脚本的顶部，在扩展Area2D后添加以下内容：
+
+```
+signal hit
+```
+
+
+
+```
+// Don't forget to rebuild the project so the editor knows about the new signal.
+
+[Signal]
+public delegate void Hit();
+```
+
+```
+// This code goes in `player.cpp`.
+// We need to register the signal here, and while we're here, we can also
+// register the other methods and register the speed property.
+void Player::_register_methods() {
+    godot::register_method("_ready", &Player::_ready);
+    godot::register_method("_process", &Player::_process);
+    godot::register_method("start", &Player::start);
+    godot::register_method("_on_Player_body_entered", &Player::_on_Player_body_entered);
+    godot::register_property("speed", &Player::speed, (real_t)400.0);
+    // This below line is the signal.
+    godot::register_signal<Player>("hit", godot::Dictionary());
+}
+```
+
+
+
+这定义了一个名为 "hit "的自定义信号，当我们的播放器与敌人发生碰撞时，我们将让它发射（发送）信号。我们将使用Area2D来检测碰撞。选择播放器节点，点击检查器选项卡旁边的 "节点 "选项卡，查看播放器可以发出的信号列表。
+
+![](images/Snipaste_2022-10-05_17-21-41.png)
+
+请注意，我们的自定义“命中”信号也在那里！由于我们的敌人将是 <font color = "blue">RigidBody2D</font> 节点，我们需要   body_entered(body: Node) 信号。当身体接触玩家时，将发出此信号。单击“连接..”，出现“连接信号”窗口。我们不需要更改任何这些设置，因此再次单击“连接”。 Godot 将自动在您的播放器脚本中创建一个函数。
+
+![](images/Snipaste_2022-10-05_17-24-33.png)
+
+请注意绿色图标表示有信号连接到此功能。将此代码添加到函数中：
+
+```
+func _on_Player_body_entered(body):
+    hide() # Player disappears after being hit.
+    emit_signal("hit")
+    # Must be deferred as we can't change physics properties on a physics callback.
+    $CollisionShape2D.set_deferred("disabled", true)
+```
+
+
+
+```
+public void OnPlayerBodyEntered(PhysicsBody2D body)
+{
+    Hide(); // Player disappears after being hit.
+    EmitSignal(nameof(Hit));
+    // Must be deferred as we can't change physics properties on a physics callback.
+    GetNode<CollisionShape2D>("CollisionShape2D").SetDeferred("disabled", true);
+}
+```
+
+
+
+```
+// This code goes in `player.cpp`.
+void Player::_on_Player_body_entered(godot::Node2D *_body) {
+    hide(); // Player disappears after being hit.
+    emit_signal("hit");
+    // Must be deferred as we can't change physics properties on a physics callback.
+    _collision_shape->set_deferred("disabled", true);
+}
+```
+
+每次敌人击中玩家时，信号就会被发射出来。我们需要禁用玩家的碰撞，这样我们就不会多次触发击中信号。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 如果在引擎的碰撞处理过程中禁用该区域的碰撞形状可能会导致错误。使用 `set_deferred()` 告诉 Godot 等待可以安全地禁用形状时再这样做。 |
+
+最后一点是添加一个函数，我们可以在开始新游戏时调用它来重置玩家。
+
+```
+func start(pos):
+    position = pos
+    show()
+    $CollisionShape2D.disabled = false
+```
+
+
+
+```
+public void Start(Vector2 pos)
+{
+    Position = pos;
+    Show();
+    GetNode<CollisionShape2D>("CollisionShape2D").Disabled = false;
+}
+```
+
+
+
+```
+// This code goes in `player.cpp`.
+void Player::start(const godot::Vector2 p_position) {
+    set_position(p_position);
+    show();
+    _collision_shape->set_disabled(false);
+}
+```
+
+随着玩家部分的工作完成，我们将在下一课中研究敌人。
+
+#### 创建敌人
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
