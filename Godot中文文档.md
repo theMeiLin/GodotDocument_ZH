@@ -4895,21 +4895,469 @@ public override void _PhysicsProcess(float delta)
 
 
 
+| 另见                                                         |
+| ------------------------------------------------------------ |
+| 要了解更多关于_process()和_physics_process()的区别，请参见空闲处理和物理处理。 |
+
+我们首先将一个方向变量初始化为Vector3.ZERO。然后，我们检查玩家是否正在按一个或多个move_*的输入，并相应地更新矢量的x和z分量。这些对应于地平面的轴。
+
+这四个条件给了我们八个可能性和八个可能的方向。
+
+如果玩家同时按下 W 和 D，则向量的长度约为 1.4。但是如果他们按下一个键，它的长度将为 1。我们希望向量的长度是一致的。为此，我们可以调用它的 normalize() 方法。
+
+```
+#func _physics_process(delta):
+    #...
+
+    if direction != Vector3.ZERO:
+        direction = direction.normalized()
+        $Pivot.look_at(translation + direction, Vector3.UP)
+```
 
 
 
+```
+public override void _PhysicsProcess(float delta)
+{
+    // ...
+
+    if (direction != Vector3.Zero)
+    {
+        direction = direction.Normalized();
+        GetNode<Spatial>("Pivot").LookAt(Translation + direction, Vector3.Up);
+    }
+}
+```
+
+在这里，我们只在方向长度大于零的情况下对向量进行归一化，这意味着玩家正在按下方向键。
+
+在这种情况下，我们还获得了 Pivot 节点并调用它的 look_at() 方法。此方法在空间中获取一个位置以查看全局坐标和向上方向。在这种情况下，我们可以使用 Vector3.UP 常量。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 节点的局部坐标，如平移(translation)，是相对于其父节点的。全局坐标相对于您可以在视口中看到的世界主轴。 |
+
+在 3D 中，包含节点位置的属性是平移。通过向它添加方向，我们可以看到距离玩家一米的位置。
+
+然后，我们更新速度。我们必须分别计算地面速度和下落速度。一定要后退一个制表符，这样行就在_Physitical_Process()函数内，但在我们刚刚编写的条件之外。
+
+```
+func _physics_process(delta):
+    #...
+    if direction != Vector3.ZERO:
+        #...
+
+    # Ground velocity
+    velocity.x = direction.x * speed
+    velocity.z = direction.z * speed
+    # Vertical velocity
+    velocity.y -= fall_acceleration * delta
+    # Moving the character
+    velocity = move_and_slide(velocity, Vector3.UP)
+```
 
 
 
+```
+public override void _PhysicsProcess(float delta)
+{
+    // ...
+
+    // Ground velocity
+    _velocity.x = direction.x * Speed;
+    _velocity.z = direction.z * Speed;
+    // Vertical velocity
+    _velocity.y -= FallAcceleration * delta;
+    // Moving the character
+    _velocity = MoveAndSlide(_velocity, Vector3.Up);
+}
+```
 
 
 
+对于垂直速度，我们每帧减去下落加速度乘以增量时间。请注意 -= 运算符的使用，它是 variable = variable - ... 的简写。
+
+这行代码会导致我们的角色在每一帧都落下。如果它已经在地面上，这可能看起来很奇怪。但是我们必须这样做才能让角色在每一帧都与地面发生碰撞。
+
+物理引擎只有在运动和碰撞发生的情况下才能检测到在某一帧中与墙壁、地板或其他物体的相互作用。我们将在后面使用这个属性来编写跳跃的代码。
+
+在最后一行，我们调用 KinematicBody.move_and_slide()。它是 KinematicBody 类的一个强大的方法，可以让你平滑地移动一个角色。如果它在运动中途撞到墙上，引擎会尝试为你平滑它。
+
+该函数有两个参数：我们的速度和向上的方向。它移动角色并在应用碰撞后返回剩余的速度。当撞到地板或墙壁时，该功能会降低或重置您在该方向的速度。在我们的例子中，存储函数的返回值可以防止角色积累垂直动量，否则动量会变得太大，角色会在一段时间后穿过地面。
+
+这就是在地板上移动角色所需的所有代码。
+
+这是完整的 Player.gd 代码供参考。
+
+```
+extends KinematicBody
+
+# How fast the player moves in meters per second.
+export var speed = 14
+# The downward acceleration when in the air, in meters per second squared.
+export var fall_acceleration = 75
+
+var velocity = Vector3.ZERO
 
 
+func _physics_process(delta):
+    var direction = Vector3.ZERO
+
+    if Input.is_action_pressed("move_right"):
+        direction.x += 1
+    if Input.is_action_pressed("move_left"):
+        direction.x -= 1
+    if Input.is_action_pressed("move_back"):
+        direction.z += 1
+    if Input.is_action_pressed("move_forward"):
+        direction.z -= 1
+
+    if direction != Vector3.ZERO:
+        direction = direction.normalized()
+        $Pivot.look_at(translation + direction, Vector3.UP)
+
+    velocity.x = direction.x * speed
+    velocity.z = direction.z * speed
+    velocity.y -= fall_acceleration * delta
+    velocity = move_and_slide(velocity, Vector3.UP)
+```
+
+
+
+```
+public class Player : KinematicBody
+{
+    // How fast the player moves in meters per second.
+    [Export]
+    public int Speed = 14;
+    // The downward acceleration when in the air, in meters per second squared.
+    [Export]
+    public int FallAcceleration = 75;
+
+    private Vector3 _velocity = Vector3.Zero;
+
+    public override void _PhysicsProcess(float delta)
+    {
+        // We create a local variable to store the input direction.
+        var direction = Vector3.Zero;
+
+        // We check for each move input and update the direction accordingly
+        if (Input.IsActionPressed("move_right"))
+        {
+            direction.x += 1f;
+        }
+        if (Input.IsActionPressed("move_left"))
+        {
+            direction.x -= 1f;
+        }
+        if (Input.IsActionPressed("move_back"))
+        {
+            // Notice how we are working with the vector's x and z axes.
+            // In 3D, the XZ plane is the ground plane.
+            direction.z += 1f;
+        }
+        if (Input.IsActionPressed("move_forward"))
+        {
+            direction.z -= 1f;
+        }
+
+        if (direction != Vector3.Zero)
+        {
+            direction = direction.Normalized();
+            GetNode<Spatial>("Pivot").LookAt(Translation + direction, Vector3.Up);
+        }
+
+        // Ground velocity
+        _velocity.x = direction.x * Speed;
+        _velocity.z = direction.z * Speed;
+        // Vertical velocity
+        _velocity.y -= FallAcceleration * delta;
+        // Moving the character
+        _velocity = MoveAndSlide(_velocity, Vector3.Up);
+    }
+}
+```
+
+
+
+##### 测试我们玩家的动作
+
+我们将把我们的 player 放在主场景中进行测试。为此，我们需要实例化播放器，然后添加相机。与2D不同，在3D中，如果您的视口没有摄影机指向某物，您将看不到任何东西。
+
+保存您的 Player 场景并打开 Main 场景。您可以单击编辑器顶部的 Main 选项卡来执行此操作。
+
+![](images/Snipaste_2022-10-08_22-40-31.png)
+
+如果您之前关闭了场景，请前往文件系统停靠区，双击Main.tscn以重新打开它。
+
+要实例化 Player，请右键单击 Main 节点并选择实例化子场景。
+
+![](images/Snipaste_2022-10-08_22-42-38.png)
+
+在弹出窗口中，双击 Player.tscn。角色应该出现在视口的中心。
+
+**添加一台摄像机**
+
+让我们接下来添加相机。就像我们对 Player's Pivot 所做的那样，我们将创建一个基本装备。再次右键单击 Main 节点，这次选择添加子节点。创建一个新的 Position3D，将其命名为 CameraPivot，然后添加一个 Camera 节点作为它的子节点。您的场景树应如下所示。
+
+![](images/Snipaste_2022-10-08_22-46-46.png)
+
+注意当你选择了摄像机时，左上方出现了预览复选框。你可以点击它来预览游戏中的摄像机投影。
+
+![](images/Snipaste_2022-10-08_22-48-32.png)
+
+我们将使用 Pivot 旋转摄像机，就像它在起重机上一样。让我们首先拆分 3D 视图，以便能够自由导航场景并查看相机看到的内容。
+
+在视口正上方的工具栏中，单击视图，然后单击 2 个视窗。您也可以按 Ctrl + 2（在 macOS 上为 Cmd + 2）。
+
+![](images/Snipaste_2022-10-08_23-04-19.png)
+
+
+
+在底部视图中，选择摄像机并通过单击复选框打开摄像机预览。
+
+![](images/Snipaste_2022-10-08_23-03-20.png)
+
+在顶视图中，将摄像机在 Z 轴（蓝色）上移动大约 19 个单位。
+
+![](images/Snipaste_2022-10-08_23-06-14.png)
+
+这里是奇迹发生的地方。选择CameraPivot并将其围绕X轴旋转 -45度（使用红圈）。你会看到摄像机的移动，就像它被连接到一个起重机上一样。
+
+![](images/Snipaste_2022-10-08_23-09-01.png)
+
+
+
+您可以通过按 F6 运行场景并按箭头键移动角色。
+
+由于采用了透视投影，我们可以看到角色周围有一些空隙。在这个游戏中，我们要用正投影来代替，以更好地框定游戏区域，使玩家更容易读懂距离。
+
+再次选择摄像机并在检查器中，将Projection设置为Orthogonal ，大小设置为 19。角色现在应该看起来更平坦，地面应该填满背景。
+
+![](images/Snipaste_2022-10-08_23-15-41.png)
+
+![](images/Snipaste_2022-10-08_23-16-45.png)
+
+这样一来，我们就有了玩家的移动和视图。接下来，我们要做的是怪物。
+
+完整代码 Player.gd
+
+```
+extends KinematicBody
+
+# How fast the player moves in meters per second.
+export var speed = 14
+# The downward acceleration when in the air, in meters per second squared.
+export var fall_acceleration = 75
+
+var velocity = Vector3.ZERO
+
+
+func _physics_process(delta):
+    var direction = Vector3.ZERO
+
+    if Input.is_action_pressed("move_right"):
+        direction.x += 1
+    if Input.is_action_pressed("move_left"):
+        direction.x -= 1
+    if Input.is_action_pressed("move_back"):
+        direction.z += 1
+    if Input.is_action_pressed("move_forward"):
+        direction.z -= 1
+
+    if direction != Vector3.ZERO:
+        direction = direction.normalized()
+        $Pivot.look_at(translation + direction, Vector3.UP)
+
+    velocity.x = direction.x * speed
+    velocity.z = direction.z * speed
+    velocity.y -= fall_acceleration * delta
+    velocity = move_and_slide(velocity, Vector3.UP)
+```
 
 
 
 #### 设计怪物场景
+
+在这一部分中，您将为怪物编写代码，我们将其称为 mobs。在下一课中，我们将在可玩区域周围随机生成它们。
+
+让我们在一个新场景中设计怪物本身。节点结构将类似于 Player 场景。
+
+再次创建一个以 KinematicBody 节点为根的场景。将其命名为暴徒。添加一个 Spatial 节点作为它的子节点，将其命名为 Pivot。然后将文件 mob.glb 从 文件系统中拖放到 Pivot 上，以将怪物的 3D 模型添加到场景中。您可以将新创建的生物节点重命名为 Character。
+
+![](images/Snipaste_2022-10-08_23-21-27.png)
+
+我们需要一个碰撞形状来让我们的实体工作。右键单击 Mob 节点，即场景的根，然后单击添加子节点。
+
+![](images/Snipaste_2022-10-08_23-23-16.png)
+
+添加一个CollisionShape。
+
+![](images/Snipaste_2022-10-08_23-24-31.png)
+
+我们应该改变它的大小以更好地适应 3D 模型。您可以通过单击并拖动橙色点以交互方式执行此操作。
+
+盒子应该接触地板并且比模型薄一点。物理引擎的工作方式是，如果玩家的球体接触到盒子的角落，就会发生碰撞。如果盒子与3D模型相比有点太大，你可能会死在离怪物很远的地方，游戏会对玩家产生不公平的感觉。
+
+![](images/Snipaste_2022-10-08_23-27-33.png)
+
+请注意，我的盒子比怪物高。这在这个游戏中是没有问题的，因为我们是从上面看场景的，而且使用的是固定视角。碰撞形状不必与模型完全匹配。应该由游戏测试时的感觉来决定其形式和大小。
+
+##### 移除屏幕外的怪物
+
+我们将在游戏关卡中定期生成怪物。如果我们不小心，它们的数量可能会增加到无穷大，我们不希望这样。每个生物实例都有内存和处理成本，当怪物在屏幕外时，我们不想为此付出代价。
+
+一旦怪物离开屏幕，我们就不再需要它了，所以我们可以删除它。 Godot 有一个节点 VisibilityNotifier 可以检测物体何时离开屏幕，我们将使用它来摧毁我们的怪物。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 当您在游戏中不断实例化对象时，可以使用一种技术来避免一直创建和销毁实例的成本，称为池化。它包括预先创建一个对象数组并一遍又一遍地重用它们。<br/>使用 GDScript 时，您无需担心这一点。使用池的主要原因是为了避免像 C# 或 Lua 这样的垃圾回收语言冻结。 GDScript 使用不同的技术来管理内存，即引用计数，它没有那个警告。您可以在此处了解有关内存管理的更多信息。 |
+
+译者注：垃圾回收         语言的冻结。
+
+选择Mob节点并添加一个VisibilityNotifier作为其子节点。另一个盒子出现了，这次是粉红色的。当这个盒子完全离开屏幕时，节点会发出一个信号。
+
+![](images/Snipaste_2022-10-08_23-35-30.png)
+
+使用橙色点调整它的大小，直到它覆盖整个 3D 模型。
+
+![](images/Snipaste_2022-10-08_23-36-22.png)
+
+编码怪物的运动
+
+让我们实现怪物的动作。我们将分两步执行此操作。首先，我们将在 Mob 上编写一个脚本，定义一个初始化怪物的函数。然后我们将在主场景中编写随机生成机制并从那里调用函数。
+
+给 Mob 添加一个脚本。模板为Empty
+
+![](images/Snipaste_2022-10-08_23-38-00.png)
+
+以下是开始时的运动代码。我们定义两个属性 min_speed 和 max_speed 来定义随机速度范围。然后我们定义并初始化速度。
+
+```
+extends KinematicBody
+
+# Minimum speed of the mob in meters per second.
+export var min_speed = 10
+# Maximum speed of the mob in meters per second.
+export var max_speed = 18
+
+var velocity = Vector3.ZERO
+
+
+func _physics_process(_delta):
+    move_and_slide(velocity)
+```
+
+
+
+```
+public class Mob : KinematicBody
+{
+    // Don't forget to rebuild the project so the editor knows about the new export variable.
+
+    // Minimum speed of the mob in meters per second
+    [Export]
+    public int MinSpeed = 10;
+    // Maximum speed of the mob in meters per second
+    [Export]
+    public int MaxSpeed = 18;
+
+    private Vector3 _velocity = Vector3.Zero;
+
+    public override void _PhysicsProcess(float delta)
+    {
+        MoveAndSlide(_velocity);
+    }
+}
+```
+
+
+
+与Player类似，我们通过调用 KinematicBody 的 move_and_slide() 方法每帧移动生物。这一次，我们不更新每一帧的速度：我们希望怪物以恒定的速度移动并离开屏幕，即使它撞到了障碍物。
+
+您可能会在 GDScript 中看到一条警告，即 move_and_slide() 的返回值未使用。这是意料之中的。您可以简单地忽略警告，或者，如果您想完全隐藏它，请在 move_and_slide(velocity) 行上方添加注释 #warning-ignore:return_value_discarded。要了解有关 GDScript 警告系统的更多信息，请参阅 GDScript 警告系统。
+
+我们需要定义另一个函数来计算起始速度。这个函数会将怪物转向玩家并随机化它的运动角度和速度。
+
+该函数将使用 start_position、怪物的生成位置和 player_position 作为其参数。
+
+我们将怪物定位在 start_position 并使用 look_at_from_position() 方法将其转向玩家，并通过绕 Y 轴旋转随机量来随机化角度。下面，rand_range() 输出一个介于 -PI / 4 弧度和 PI / 4 弧度之间的随机值。
+
+```
+# We will call this function from the Main scene.
+func initialize(start_position, player_position):
+    # We position the mob and turn it so that it looks at the player.
+    look_at_from_position(start_position, player_position, Vector3.UP)
+    # And rotate it randomly so it doesn't move exactly toward the player.
+    rotate_y(rand_range(-PI / 4, PI / 4))
+```
+
+
+
+```
+// We will call this function from the Main scene
+public void Initialize(Vector3 startPosition, Vector3 playerPosition)
+{
+    // We position the mob and turn it so that it looks at the player.
+    LookAtFromPosition(startPosition, playerPosition, Vector3.Up);
+    // And rotate it randomly so it doesn't move exactly toward the player.
+    RotateY((float)GD.RandRange(-Mathf.Pi / 4.0, Mathf.Pi / 4.0));
+}
+```
+
+
+
+然后我们再次使用 rand_range() 计算随机速度，并使用它来计算速度。
+
+我们首先创建一个指向前方的 3D 矢量，将其乘以我们的 random_speed，最后使用 Vector3 类的 rotate() 方法对其进行旋转。
+
+```
+func initialize(start_position, player_position):
+    # ...
+
+    # We calculate a random speed.
+    var random_speed = rand_range(min_speed, max_speed)
+    # We calculate a forward velocity that represents the speed.
+    velocity = Vector3.FORWARD * random_speed
+    # We then rotate the vector based on the mob's Y rotation to move in the direction it's looking.
+    velocity = velocity.rotated(Vector3.UP, rotation.y)
+```
+
+
+
+```
+public void Initialize(Vector3 startPosition, Vector3 playerPosition)
+{
+    // ...
+
+    // We calculate a random speed.
+    float randomSpeed = (float)GD.RandRange(MinSpeed, MaxSpeed);
+    // We calculate a forward velocity that represents the speed.
+    _velocity = Vector3.Forward * randomSpeed;
+    // We then rotate the vector based on the mob's Y rotation to move in the direction it's looking
+    _velocity = _velocity.Rotated(Vector3.Up, Rotation.y);
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #### 生成怪物
 
