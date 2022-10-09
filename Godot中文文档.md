@@ -5990,15 +5990,105 @@ public void Squash()
 
 但是，玩家还不会死。我们将在下一部分中解决这个问题。
 
-
-
-
-
-
-
-
-
 #### 杀死玩家
+
+我们可以通过跳到敌人身上来杀死他们，但玩家仍然不能死亡。让我们来解决这个问题。
+
+我们希望以不同于压扁敌人的方式检测被敌人击中。我们希望玩家在地板上移动时死亡，但如果他们在空中则不会。我们可以使用向量数学来区分这两种碰撞。不过，我们将使用一个 Area 节点，它对碰撞盒非常有效。
+
+##### 带有Area节点的 Hitbox
+
+回到 Player 场景并添加一个新的 Area 节点。将其命名为 MobDetector。添加一个 CollisionShape 节点作为它的子节点。
+
+![](images/Snipaste_2022-10-09_11-10-57.png)
+
+在检查器中，为其指定一个圆柱体形状。
+
+![](images/Snipaste_2022-10-09_11-11-46.png)
+
+您可以使用以下技巧使碰撞仅在玩家在地面上或靠近地面时发生。您可以减小圆柱体的高度并将其向上移动到角色的顶部。这样一来，当玩家跳跃时，形状会太高，敌人无法与之相撞。
+
+![](images/Snipaste_2022-10-09_11-13-38.png)
+
+你还希望圆柱体比球体更宽。这样一来，玩家在碰撞之前就会被击中，并被推到怪物的碰撞盒之上。
+
+圆柱体越宽，玩家就越容易被杀死。
+
+接下来，再次选择 MobDetector 节点，并在检查器中关闭其 Monitorable 属性。这使得其他物理节点无法检测到该区域。互补的监控属性允许它检测碰撞。然后，移除 Collision -> Layer 并将遮罩设置为“enemies”层
+
+![](images/Snipaste_2022-10-09_11-16-17.png)
+
+当区域检测到碰撞时，它们会发出信号。我们要把一个信号连接到Player节点上。在节点标签中，双击body_entered信号并将其连接到播放器。
+
+![](images/Snipaste_2022-10-09_11-17-37.png)
+
+当 KinematicBody 或 RigidBody 节点进入时，MobDetector 将发出 body_entered。由于它只掩盖了“敌人”物理层，它只会检测到 Mob 节点。
+
+代码方面，我们要做两件事：发出一个信号，我们稍后将使用它来结束游戏并摧毁玩家。我们可以将这些操作包装在 die() 函数中，该函数可以帮助我们在代码上放置描述性标签。
+
+```
+# Emitted when the player was hit by a mob.
+# Put this at the top of the script.
+signal hit
+
+
+# And this function at the bottom.
+func die():
+    emit_signal("hit")
+    queue_free()
+
+
+func _on_MobDetector_body_entered(_body):
+    die()
+```
+
+
+
+```
+// Don't forget to rebuild the project so the editor knows about the new signal.
+
+// Emitted when the player was hit by a mob.
+[Signal]
+public delegate void Hit();
+
+// ...
+
+private void Die()
+{
+    EmitSignal(nameof(Hit));
+    QueueFree();
+}
+
+// We also specified this function name in PascalCase in the editor's connection window
+public void OnMobDetectorBodyEntered(Node body)
+{
+    Die();
+}
+```
+
+
+
+按 F5 再次尝试游戏。如果一切设置正确，角色应该会在敌人撞到它时死亡。
+
+但是请注意，这完全取决于 Player 的大小和位置以及 Mob 的碰撞形状。您可能需要移动它们并调整它们的大小以获得紧凑的游戏感觉。
+
+##### 结束游戏
+
+我们可以使用 Player 的命中信号来结束游戏。我们需要做的就是将它连接到主节点并停止 MobTimer 的反应。
+
+打开 Main.tscn，选择 Player 节点，在 Node dock 中，将其 hit 信号连接到 Main 节点。
+
+
+
+
+
+
+
+
+
+
+
+
 
 #### 得分和重玩
 
