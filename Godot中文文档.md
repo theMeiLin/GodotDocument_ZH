@@ -5341,27 +5341,662 @@ public void Initialize(Vector3 startPosition, Vector3 playerPosition)
 
 
 
+**离开屏幕**
+
+我们仍然要在怪物离开屏幕时销毁它们。为了做到这一点，我们将把我们的VisibilityNotifier节点的screen_exited信号连接到Mob。
+
+通过单击编辑器顶部的 3D 标签返回 3D 视口。您也可以按 Ctrl + F2（在 macOS 上按 Alt + 2）。
+
+![](images/Snipaste_2022-10-09_06-58-33.png)
+
+选择 VisibilityNotifier 节点，然后在界面的右侧，导航到节点停靠栏。双击 screen_exited() 信号。
+
+![](images/Snipaste_2022-10-09_06-59-23.png)
+
+将信号连接到 Mob。
+
+![](images/Snipaste_2022-10-09_07-00-06.png)
+
+这将带您回到脚本编辑器并为您添加一个新函数 _on_VisibilityNotifier_screen_exited()。从中调用 queue_free() 方法。
+
+当 VisibilityNotifier 的盒子离开屏幕时，这将销毁 mob 实例。
+
+```
+func _on_VisibilityNotifier_screen_exited():
+    queue_free()
+```
 
 
 
+```
+// We also specified this function name in PascalCase in the editor's connection window
+public void OnVisibilityNotifierScreenExited()
+{
+    QueueFree();
+}
+```
 
 
 
+我们的怪物准备好进入游戏了！在下一部分中，您将在游戏关卡中生成怪物。
 
+这是完整的 Mob.gd 脚本供参考。
 
+```
+public class Mob : KinematicBody
+{
+    // Minimum speed of the mob in meters per second
+    [Export]
+    public int MinSpeed = 10;
+    // Maximum speed of the mob in meters per second
+    [Export]
+    public int MaxSpeed = 18;
 
+    private Vector3 _velocity = Vector3.Zero;
 
+    public override void _PhysicsProcess(float delta)
+    {
+        MoveAndSlide(_velocity);
+    }
 
+    // We will call this function from the Main scene
+    public void Initialize(Vector3 startPosition, Vector3 playerPosition)
+    {
+        LookAtFromPosition(startPosition, playerPosition, Vector3.Up);
+        RotateY((float)GD.RandRange(-Mathf.Pi / 4.0, Mathf.Pi / 4.0));
 
+        var randomSpeed = (float)GD.RandRange(MinSpeed, MaxSpeed);
+        _velocity = Vector3.Forward * randomSpeed;
+        _velocity = _velocity.Rotated(Vector3.Up, Rotation.y);
+    }
 
-
-
+    // We also specified this function name in PascalCase in the editor's connection window
+    public void OnVisibilityNotifierScreenExited()
+    {
+        QueueFree();
+    }
+}
+```
 
 
 
 #### 生成怪物
 
+在这一部分中，我们将沿着一条路径随机生成怪物。到最后，您将有在游戏板上漫游的怪物。
+
+双击文件系统停靠区的Main.tscn，打开Main场景。
+
+在绘制路径之前，我们将更改游戏分辨率。我们游戏的默认窗口大小为 1024x600。我们将把它设置为 720x540，一个漂亮的小盒子。
+
+转到项目-> 项目设置。
+
+![](images/Snipaste_2022-10-09_07-05-40.png)
+
+在左侧菜单中，向下导航至显示 -> 窗口。在右侧，将宽度设置为 720，高度设置为 540。
+
+![](images/Snipaste_2022-10-09_07-07-14.png)
+
+##### 创建生成路径
+
+就像您在 2D 游戏教程中所做的那样，您将设计一条路径并使用 PathFollow 节点对其上的随机位置进行采样。
+
+不过在3D中，绘制路径就有点复杂了。我们希望它围绕着游戏视图，这样怪物就会出现在屏幕外。但如果我们画了一条路径，我们就无法从摄像机预览中看到它。
+
+要找到视图的限制，我们可以使用一些占位符网格。您的视口仍应分为两部分，相机预览位于底部。如果不是这种情况，请按 Ctrl + 2（在 macOS 上为 Cmd + 2）将视图一分为二。选择 Camera 节点并单击底部视口中的 Preview 复选框。
+
+![](images/Snipaste_2022-10-09_07-09-59.png)
+
+**添加占位符圆柱体**
+
+让我们添加占位符网格。添加一个新的 Spatial 节点作为 Main 节点的子节点，并将其命名为 Cylinders。我们将使用它对圆柱体进行分组。作为它的子节点，添加一个 MeshInstance 节点。
+
+![](images/Snipaste_2022-10-09_07-11-19.png)
+
+在检查器中，给Mesh属性指定一个CylinderMesh。
+
+![](images/Snipaste_2022-10-09_07-12-11.png)
+
+使用视口左上角的菜单将顶部视口设置为顶部正交视图。或者，您可以按键盘的 7 键。
+
+![](images/Snipaste_2022-10-09_07-13-37.png)
+
+网格对我来说有点分散注意力。您可以通过转到工具栏中的“查看”菜单并单击“查看网格”来切换它。
+
+![](images/Snipaste_2022-10-09_07-14-32.png)
+
+您现在想要沿地平面移动圆柱体，查看底部视口中的相机预览。我建议使用网格捕捉来做到这一点。您可以通过单击工具栏中的磁铁图标或按 Y 来切换它。
+
+![](images/Snipaste_2022-10-09_07-18-29.png)
+
+将圆柱体放置在左上角的相机视图之外。
+
+![](images/Snipaste_2022-10-09_07-17-59.png)
+
+我们将创建网格的副本并将它们放置在游戏区域周围。按 Ctrl + D（在 macOS 上为 Cmd + D）复制节点。您也可以右键单击场景停靠栏中的节点并选择复制。沿蓝色 Z 轴向下移动副本，直到它位于相机预览之外。
+
+![](images/Snipaste_2022-10-09_07-30-06.png)
+
+它们在白色中很难看到，不是吗？让我们给他们一个新的材料，使他们脱颖而出。
+
+在 3D 中，材料定义了表面的视觉属性，如颜色、反射光的方式等。我们可以使用它们来更改网格的颜色。
+
+我们可以一次更新所有四个气缸。选择场景停靠栏中的所有网格实例。为此，您可以单击第一个并 Shift 单击最后一个。
+
+![](images/Snipaste_2022-10-09_07-32-04.png)
+
+在检查器中，展开 Material 部分并将 SpatialMaterial 分配给 slot 0。
+
+![](images/Snipaste_2022-10-09_07-34-06.png)
+
+单击球体图标以打开材质资源。您可以预览材料和一长串充满属性的部分。您可以使用这些来创建各种表面，从金属到岩石或水。
+
+展开 Albedo 部分并将颜色设置为与背景形成对比的颜色，例如亮橙色。
+
+![](images/Snipaste_2022-10-09_07-35-32.png)
+
+我们现在可以使用圆柱体作为指南。通过单击它们旁边的灰色箭头将它们折叠到场景停靠栏中。接下来，您还可以通过单击圆柱体旁边的眼睛图标来切换它们的可见性。
+
+![](images/Snipaste_2022-10-09_07-36-49.png)
+
+添加一个 Path 节点作为 Main 的子节点。在工具栏中，将出现四个图标。单击添加点工具，该图标带有绿色的“+”号。
+
+![](images/Snipaste_2022-10-09_07-38-08.png)
+
+| 注意事项                                                 |
+| -------------------------------------------------------- |
+| 您可以将鼠标悬停在任何图标上以查看描述该工具的工具提示。 |
+
+译者注：Shift + 鼠标中键可以平移视图
+
+单击每个圆柱体的中心以创建一个点。然后，单击工具栏中的关闭曲线图标以关闭路径。如果任何一点有点偏离，您可以单击并拖动它以重新定位它。
+
+![](images/Snipaste_2022-10-09_07-40-50.png)
+
+你的路径应该看起来像这样。
+
+![](images/Snipaste_2022-10-09_07-42-09.png)
+
+要在其上采样随机位置，我们需要一个 PathFollow 节点。添加一个 PathFollow 作为路径的子项。将这两个节点分别重命名为 SpawnPath 和 SpawnLocation。它更能描述我们将使用它们的目的。
+
+![](images/Snipaste_2022-10-09_07-43-41.png)
+
+有了这些，我们就可以编写生成机制了。
+
+##### 随机生成怪物
+
+右键单击Main节点并将新脚本附加到它。
+
+![](images/Snipaste_2022-10-09_07-45-47.png)
+
+我们首先将一个变量导出到检查器，以便我们可以将 Mob.tscn 或任何其他怪物分配给它
+
+然后，当我们要按程序生成怪物时，我们希望在每次玩游戏时随机化数字。如果我们不这样做，怪物将始终按照相同的顺序生成。
+
+```
+extends Node
+
+export (PackedScene) var mob_scene
+
+
+func _ready():
+    randomize()
+```
+
+
+
+```
+public class Main : Node
+{
+    // Don't forget to rebuild the project so the editor knows about the new export variable.
+
+#pragma warning disable 649
+    // We assign this in the editor, so we don't need the warning about not being assigned.
+    [Export]
+    public PackedScene MobScene;
+#pragma warning restore 649
+
+    public override void _Ready()
+    {
+        GD.Randomize();
+    }
+}
+```
+
+
+
+我们希望以固定的时间间隔产生小怪。为此，我们需要回到场景并添加一个计时器。不过，在此之前，我们需要将 Mob.tscn 文件分配给 mob_scene 属性。
+
+返回 3D 屏幕并选择主节点。将 Mob.tscn 从文件系统停靠栏拖到检查器中的 Mob Scene 插槽。
+
+![](images/Snipaste_2022-10-09_07-50-43.png)
+
+添加一个新的 Timer 节点作为 Main 的子节点。将其命名为 MobTimer。
+
+![](images/Snipaste_2022-10-09_07-51-47.png)
+
+在检查器中，将其 Wait Time 设置为 0.5 秒并打开 Autostart，以便在我们运行游戏时自动启动。
+
+![](images/Snipaste_2022-10-09_07-52-46.png)
+
+计时器每次到达等待时间结束时都会发出超时信号。默认情况下，它们会自动重启，循环发出信号。我们可以从主节点连接到这个信号，以每 0.5 秒产生一次怪物。
+
+在 MobTimer 仍处于选中状态的情况下，前往右侧的节点停靠栏并双击超时信号。
+
+![](images/Snipaste_2022-10-09_07-53-56.png)
+
+将其连接到Main节点。
+
+![](images/Snipaste_2022-10-09_07-54-47.png)
+
+这将带您回到脚本中，使用新的空 _on_MobTimer_timeout() 函数。
+
+让我们编写怪物生成逻辑。我们要：
+
+1. 实例化怪物场景。
+2. 在生成路径上对随机位置进行采样。
+3. 获取玩家的位置。
+4. 调用生物的 initialize() 方法，将随机位置和玩家位置传递给它。
+5. 将怪物添加为Main节点的子节点。
+
+```
+func _on_MobTimer_timeout():
+    # Create a new instance of the Mob scene.
+    var mob = mob_scene.instance()
+
+    # Choose a random location on the SpawnPath.
+    # We store the reference to the SpawnLocation node.
+    var mob_spawn_location = get_node("SpawnPath/SpawnLocation")
+    # And give it a random offset.
+    mob_spawn_location.unit_offset = randf()
+
+    var player_position = $Player.transform.origin
+    mob.initialize(mob_spawn_location.translation, player_position)
+
+    add_child(mob)
+```
+
+
+
+```
+// We also specified this function name in PascalCase in the editor's connection window
+public void OnMobTimerTimeout()
+{
+    // Create a new instance of the Mob scene.
+    Mob mob = (Mob)MobScene.Instance();
+
+    // Choose a random location on the SpawnPath.
+    // We store the reference to the SpawnLocation node.
+    var mobSpawnLocation = GetNode<PathFollow>("SpawnPath/SpawnLocation");
+    // And give it a random offset.
+    mobSpawnLocation.UnitOffset = GD.Randf();
+
+    Vector3 playerPosition = GetNode<Player>("Player").Transform.origin;
+    mob.Initialize(mobSpawnLocation.Translation, playerPosition);
+
+    AddChild(mob);
+
+}
+```
+
+
+
+上面， randf() 产生一个介于 0 和 1 之间的随机值，这是 PathFollow 节点的 unit_offset 所期望的。
+
+以下是目前为止完整的Main.gd脚本，以供参考。
+
+```
+extends Node
+
+export (PackedScene) var mob_scene
+
+
+func _ready():
+    randomize()
+
+
+func _on_MobTimer_timeout():
+    var mob = mob_scene.instance()
+
+    var mob_spawn_location = get_node("SpawnPath/SpawnLocation")
+    mob_spawn_location.unit_offset = randf()
+    var player_position = $Player.transform.origin
+    mob.initialize(mob_spawn_location.translation, player_position)
+
+    add_child(mob)
+```
+
+
+
+```
+public class Main : Node
+{
+#pragma warning disable 649
+    [Export]
+    public PackedScene MobScene;
+#pragma warning restore 649
+
+    public override void _Ready()
+    {
+        GD.Randomize();
+    }
+
+    public void OnMobTimerTimeout()
+    {
+        Mob mob = (Mob)MobScene.Instance();
+
+        var mobSpawnLocation = GetNode<PathFollow>("SpawnPath/SpawnLocation");
+        mobSpawnLocation.UnitOffset = GD.Randf();
+
+        Vector3 playerPosition = GetNode<Player>("Player").Transform.origin;
+        mob.Initialize(mobSpawnLocation.Translation, playerPosition);
+
+        AddChild(mob);
+    }
+}
+```
+
+
+
+您可以按 F6 测试场景。您应该会看到怪物生成并沿直线移动。
+
+![](images/Snipaste_2022-10-09_08-02-31.png)
+
+目前，当它们的路径交叉时，它们会相互碰撞和滑动。我们将在下一部分解决这个问题。
+
 #### 跳跃和压扁怪物
+
+在这一部分中，我们将添加跳跃、压扁怪物的能力。在下一课中，我们会让怪物在地面上击中玩家时让玩家死亡。
+
+首先，我们必须更改一些与物理交互相关的设置。进入物理层的世界。
+
+##### 控制物理相互作用
+
+物理实体可以访问两个互补的属性：图层和遮罩。图层定义对象位于哪个物理层上。
+
+遮罩控制着身体将听到和检测的层。这会影响碰撞检测。当你想让两个物体相互作用时，你至少需要一个物体有一个与另一个物体相对应的遮罩。
+
+如果这令人困惑，请不要担心，我们将在一秒钟内看到三个示例。
+
+重要的一点是，您可以使用图层和遮罩来过滤物理交互、控制性能并消除代码中对额外条件的需求。
+
+默认情况下，所有物理实体和区域都设置为图层和掩码 0。这意味着它们都相互碰撞。
+
+物理层由数字表示，但我们可以给它们命名以跟踪是什么。
+
+**设置图层名称**
+
+让我们给我们的物理层命名。转到项目-> 项目设置。
+
+![](images/Snipaste_2022-10-09_08-10-09.png)
+
+在左侧菜单中，向下导航到 层名称 -> 3D物理。您可以在右侧看到一个图层列表，其中每个图层旁边都有一个字段。你可以在那里设置他们的名字。分别命名前三层的player、enemies和world。
+
+![](images/Snipaste_2022-10-09_08-11-39.png)
+
+现在，我们可以将它们分配给我们的物理节点。
+
+分配图层和遮罩
+
+在主场景中，选择地面节点。在检查器中，展开 Collision 部分。在那里，您可以将节点的图层和遮罩视为按钮网格。
+
+![](images/Snipaste_2022-10-09_08-15-08.png)
+
+地面是世界的一部分，所以我们希望它成为第三层的一部分。单击点亮按钮以关闭第一层并打开第三层。然后，通过单击关闭遮罩。
+
+![](images/Snipaste_2022-10-09_08-16-15.png)
+
+正如我上面提到的，Mask 属性允许节点监听与其他物理对象的交互，但我们不需要它有碰撞。地面不需要听任何东西；它只是为了防止生物掉落。
+
+请注意，您可以单击属性右侧的“...”按钮以查看命名复选框的列表。
+
+![](images/Snipaste_2022-10-09_08-17-39.png)
+
+接下来是Player和Mob。在文件系统停靠区双击Player.tscn文件，打开该文件。
+
+选择 Player 节点并将其 Collision -> Mask 设置为“enemies”和“world”。您可以保留默认的 Layer 属性，因为第一层是“player”层。
+
+![](images/Snipaste_2022-10-09_08-20-56.png)
+
+然后，双击 Mob.tscn 打开 Mob 场景并选择 Mob 节点。
+
+将其 Collision -> Layer 设置为“enemies”并取消设置其 Collision -> Mask，将遮罩留空。
+
+![](images/Snipaste_2022-10-09_08-22-07.png)
+
+这些设置意味着怪物将相互移动。如果您希望怪物相互碰撞并相互滑动，请打开“enemies” 遮盖。
+
+| 注意事项                                                     |
+| ------------------------------------------------------------ |
+| 怪物不需要遮盖“world”层，因为它们只在 XZ 平面上移动。我们不会通过设计对它们施加任何重力。 |
+
+##### 跳跃
+
+跳跃机制本身只需要两行代码。打开播放器脚本。我们需要一个值来控制跳跃的强度并更新 _physics_process() 来编码跳跃。
+
+在定义fall_acceleration 的行之后，在脚本顶部添加jump_impulse。
+
+```
+# Vertical impulse applied to the character upon jumping in meters per second.
+export var jump_impulse = 20
+```
+
+
+
+```
+// Don't forget to rebuild the project so the editor knows about the new export variable.
+
+// ...
+// Vertical impulse applied to the character upon jumping in meters per second.
+[Export]
+public int JumpImpulse = 20;
+```
+
+
+
+在 _physics_process() 中，在我们调用 move_and_slide() 的行之前添加以下代码。
+
+```
+func _physics_process(delta):
+	move_and_slide(velocity)
+	
+	# Jumping.
+	if is_on_floor() and Input.is_action_just_released("jump"):
+		velocity.y += jump_impulse
+```
+
+
+
+```
+public override void _PhysicsProcess(float delta)
+{
+    // ...
+
+    // Jumping.
+    if (IsOnFloor() && Input.IsActionJustPressed("jump"))
+    {
+        _velocity.y += JumpImpulse;
+    }
+
+    // ...
+}
+```
+
+
+
+这就是你所需要的跳跃！
+
+is_on_floor() 方法是来自 KinematicBody 类的工具。如果身体在此帧中与地板发生碰撞，则返回 true。这就是我们将重力应用到 Player 的原因：所以我们会与地板发生碰撞，而不是像怪物一样漂浮在地板上。
+
+如果角色在地板上并且玩家按下“跳跃”，我们会立即给予他们很大的垂直速度。在游戏中，你真的希望控制具有响应性，并提供像这样的即时速度提升，虽然不现实，但感觉很棒。
+
+请注意，Y 轴向上为正。这与 2D 不同，其中 Y 轴为正向下。
+
+##### 压扁怪物
+
+接下来让我们加入压扁的机制。我们要让角色在怪物身上弹跳，同时杀死它们。
+
+我们需要检测与怪物的碰撞并将它们与地板的碰撞区分开来。为此，我们可以使用 Godot 的组标记功能。
+
+再次打开场景Mob.tscn，选择Mob节点。进入右边的节点停靠区，看到一个信号列表。节点停靠区有两个标签。信号，你已经用过了，还有组，它允许你给节点分配标签。
+
+单击它以显示一个字段，您可以在其中编写标签名称。在字段中输入“mob”，然后单击“添加”按钮。
+
+![](images/Snipaste_2022-10-09_08-31-50.png)
+
+场景停靠栏中会出现一个图标，表明该节点是至少一个组的一部分。
+
+![](images/Snipaste_2022-10-09_08-32-30.png)
+
+我们现在可以使用代码中的组来区分与怪物的碰撞和与地板的碰撞。
+
+**编写踩扁机制**
+
+回到 Player 脚本，对踩扁和弹跳进行编码。
+
+在脚本的顶部，我们需要另一个属性bounce_impulse。挤压敌人时，我们不一定希望角色像跳跃时一样高。
+
+```
+# Vertical impulse applied to the character upon bouncing over a mob in
+# meters per second.
+export var bounce_impulse = 16
+```
+
+
+
+```
+// Don't forget to rebuild the project so the editor knows about the new export variable.
+
+// Vertical impulse applied to the character upon bouncing over a mob in meters per second.
+[Export]
+public int BounceImpulse = 16;
+```
+
+
+
+然后，在 _physics_process() 的底部，添加以下循环。使用 move_and_slide()，Godot 有时会使身体连续移动多次以平滑角色的运动。所以我们必须遍历所有可能发生的碰撞。
+
+在循环的每一次迭代中，我们都会检查我们是否落在了一个怪物身上。如果是这样，我们将其杀死并反弹。
+
+通过这段代码，如果在某一帧上没有发生碰撞，循环就不会运行。
+
+```
+func _physics_process(delta):
+	# We create a local variable to store the input direction.
+	var direction = Vector3.ZERO
+	# We check for each move input and update the direction accordingly.
+	if Input.is_action_pressed("move_right"):
+		direction.x += 1
+	if Input.is_action_pressed("move_left"):
+		direction.x -= 1
+	if Input.is_action_pressed("move_back"):
+		direction.z += 1
+	if Input.is_action_pressed("move_forward"):
+		direction.z -= 1
+		
+	for index in range(get_slide_count()):
+		# We check every collision that occurred this frame.
+		var collision = get_slide_collision(index)
+		# If we collide with a monster...
+		if collision.collider.is_in_group("mob"):
+			var mob = collision.collider
+			# ...we check that we are hitting it from above.
+			if Vector3.UP.dot(collision.normal) > 0.1:
+				# If so, we squash it and bounce.
+				mob.squash()
+				velocity.y = bounce_impulse
+```
+
+
+
+```
+public override void _PhysicsProcess(float delta)
+{
+    // ...
+
+    for (int index = 0; index < GetSlideCount(); index++)
+    {
+        // We check every collision that occurred this frame.
+        KinematicCollision collision = GetSlideCollision(index);
+        // If we collide with a monster...
+        if (collision.Collider is Mob mob && mob.IsInGroup("mob"))
+        {
+            // ...we check that we are hitting it from above.
+            if (Vector3.Up.Dot(collision.Normal) > 0.1f)
+            {
+                // If so, we squash it and bounce.
+                mob.Squash();
+                _velocity.y = BounceImpulse;
+            }
+        }
+    }
+}
+```
+
+
+
+函数 get_slide_count() 和 get_slide_collision() 都来自 KinematicBody 类，并且与 move_and_slide() 相关。
+
+get_slide_collision() 返回一个 KinematicCollision 对象，该对象包含有关碰撞发生位置和方式的信息。例如，我们使用它的 collider 属性通过调用 is_in_group() 来检查我们是否与“mob”发生碰撞：
+
+`collision.collider.is_in_group("mob")`.
+
+| 注意事项                               |
+| -------------------------------------- |
+| is_in_group() 方法在每个节点上都可用。 |
+
+为了检查我们是否降落在怪物上，我们使用矢量点积：Vector3.UP.dot(collision.normal) > 0.1。碰撞法线是垂直于发生碰撞的平面的 3D 矢量。点积允许我们将其与向上方向进行比较。
+
+对于点积，当结果大于 0 时，两个向量的夹角小于 90 度。高于 0.1 的值告诉我们，我们大致在怪物之上。
+
+我们正在调用一个未定义的函数 mob.squash()。我们必须将它添加到 Mob 类中。
+
+在文件系统停靠区双击Mob.gd脚本，打开它。在脚本的顶部，我们要定义一个名为squashed的新信号。而在底部，你可以添加squash函数，在这里我们发射信号并销毁暴徒。
+
+```
+# Emitted when the player jumped on the mob.
+signal squashed
+
+# ...
+
+
+func squash():
+    emit_signal("squashed")
+    queue_free()
+```
+
+
+
+```
+// Don't forget to rebuild the project so the editor knows about the new signal.
+
+// Emitted when the played jumped on the mob.
+[Signal]
+public delegate void Squashed();
+
+// ...
+
+public void Squash()
+{
+    EmitSignal(nameof(Squashed));
+    QueueFree();
+}
+```
+
+
+
+我们将在下一课中使用该信号为分数加分。
+
+有了这个，你应该能够通过跳跃来杀死怪物。您可以按 F5 尝试游戏并将 Main.tscn 设置为项目的主场景。
+
+但是，玩家还不会死。我们将在下一部分中解决这个问题。
+
+
+
+
+
+
+
+
 
 #### 杀死玩家
 
